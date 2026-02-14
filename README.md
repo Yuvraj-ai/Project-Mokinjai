@@ -1,4 +1,4 @@
-# Mokinjay - AI Agent Builder
+# Mokinjai - AI Agent Builder
 
 A visual AI agent builder platform where users create, configure, and run AI workflows by connecting modular components through a drag-and-drop interface. Think **"Zapier meets LangChain"** with a visual canvas.
 
