@@ -20,7 +20,6 @@ const CustomEdge: React.FC<EdgeProps> = ({
   markerEnd,
 }) => {
   const [hovered, setHovered] = useState(false);
-  const edges = useWorkflowStore((s) => s.edges);
   const onEdgesChange = useWorkflowStore((s) => s.onEdgesChange);
 
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -39,7 +38,7 @@ const CustomEdge: React.FC<EdgeProps> = ({
 
   return (
     <>
-      {/* Invisible wider path for easier hover target */}
+      {/* Invisible wider path for hover detection */}
       <path
         d={edgePath}
         fill="none"
@@ -53,11 +52,11 @@ const CustomEdge: React.FC<EdgeProps> = ({
         markerEnd={markerEnd}
         style={{
           ...style,
-          strokeWidth: 2,
-          stroke: hovered ? '#3b82f6' : '#94a3b8',
-          strokeDasharray: hovered ? undefined : '5 5',
-          animation: 'none',
-          transition: 'stroke 0.2s ease',
+          strokeWidth: hovered ? 2.5 : 1.5,
+          stroke: hovered ? 'var(--accent-mid)' : 'rgba(99,102,241,0.4)',
+          strokeDasharray: hovered ? undefined : '6 4',
+          filter: hovered ? `drop-shadow(0 0 4px var(--accent-glow))` : 'none',
+          transition: 'stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease',
         }}
       />
       <EdgeLabelRenderer>
@@ -73,9 +72,13 @@ const CustomEdge: React.FC<EdgeProps> = ({
         >
           {hovered && (
             <button
-              className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white hover:bg-red-600 shadow-md transition-all duration-150"
+              className="flex items-center justify-center w-5 h-5 rounded-full text-white transition-all duration-150"
+              style={{
+                background: 'var(--status-error)',
+                boxShadow: '0 2px 8px rgba(239,68,68,0.4)',
+              }}
               onClick={handleDelete}
-              title="Delete edge"
+              title="Delete connection"
             >
               <X className="w-3 h-3" />
             </button>

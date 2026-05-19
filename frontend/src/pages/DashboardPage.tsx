@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { listWorkspaces, createWorkspace } from '../api/workspaces'
 import { createWorkflow } from '../api/workflows'
 import WorkflowList from '../components/dashboard/WorkflowList'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, Zap, GitBranch, Play } from 'lucide-react'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -28,16 +28,14 @@ export default function DashboardPage() {
     }
   }, [])
 
-  useEffect(() => {
-    initWorkspace()
-  }, [initWorkspace])
+  useEffect(() => { initWorkspace() }, [initWorkspace])
 
   const handleCreateWorkflow = async () => {
     if (!workspaceId || creating) return
     setCreating(true)
     try {
       const workflow = await createWorkflow(workspaceId, {
-        name: `Untitled Workflow`,
+        name: 'Untitled Workflow',
         description: '',
       })
       navigate(`/workflows/${workflow.id}/edit`)
@@ -51,22 +49,48 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <div className="flex flex-col items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, var(--accent-from), var(--accent-to))' }}
+          >
+            <Loader2 className="w-5 h-5 text-white animate-spin" />
+          </div>
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading workspace…</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-8">
+    <div
+      className="max-w-6xl mx-auto px-6 py-8 animate-fade-in"
+      style={{ color: 'var(--text-primary)' }}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Workflows</h1>
-          <p className="text-gray-500 mt-1 text-sm">Build and manage your AI agent workflows</p>
+          <div className="flex items-center gap-2.5 mb-2">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.25)' }}
+            >
+              <GitBranch className="w-4 h-4" style={{ color: 'var(--accent-mid)' }} />
+            </div>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+              Workflows
+            </h1>
+          </div>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Build and orchestrate your AI agent pipelines
+          </p>
         </div>
+
         <button
+          id="create-workflow-btn"
           onClick={handleCreateWorkflow}
           disabled={creating}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2.5 px-5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="btn-primary"
         >
           {creating ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -77,8 +101,42 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        {[
+          { label: 'Total Workflows', icon: GitBranch, color: 'var(--accent-mid)', bg: 'rgba(99,102,241,0.1)' },
+          { label: 'Executions Today', icon: Play, color: 'var(--status-success)', bg: 'rgba(34,197,94,0.1)' },
+          { label: 'Agent Nodes Used', icon: Zap, color: 'var(--node-agent)', bg: 'rgba(168,85,247,0.1)' },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className="rounded-xl p-4 flex items-center gap-3"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: stat.bg }}
+            >
+              <stat.icon className="w-4 h-4" style={{ color: stat.color }} />
+            </div>
+            <div>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{stat.label}</p>
+              <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>—</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Workflow list */}
       {workspaceId && (
-        <WorkflowList workspaceId={workspaceId} key={refreshKey} />
+        <WorkflowList
+          workspaceId={workspaceId}
+          key={refreshKey}
+          onRefresh={() => setRefreshKey(k => k + 1)}
+        />
       )}
     </div>
   )

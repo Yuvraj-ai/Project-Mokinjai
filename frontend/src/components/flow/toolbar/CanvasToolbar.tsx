@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { Save, Play, ZoomIn, ZoomOut, Maximize, Loader2 } from 'lucide-react';
+import { Save, Play, ZoomIn, ZoomOut, Maximize, Loader2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import useWorkflowStore from '../../../store/workflowStore';
 import { useExecutionStore } from '../../../store/executionStore';
 import { updateWorkflow } from '../../../api/workflows';
@@ -13,19 +14,19 @@ interface CanvasToolbarProps {
 
 const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ workspaceId, workflowId }) => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
-  const nodes = useWorkflowStore((s) => s.nodes);
-  const edges = useWorkflowStore((s) => s.edges);
-  const markClean = useWorkflowStore((s) => s.markClean);
-  const isDirty = useWorkflowStore((s) => s.isDirty);
+  const navigate = useNavigate();
+  const nodes        = useWorkflowStore((s) => s.nodes);
+  const edges        = useWorkflowStore((s) => s.edges);
+  const markClean    = useWorkflowStore((s) => s.markClean);
+  const isDirty      = useWorkflowStore((s) => s.isDirty);
+  const workflowName = useWorkflowStore((s) => s.workflowName);
   const { setExecution, setRunning, isRunning, clearNodeStatuses } = useExecutionStore();
   const [saving, setSaving] = useState(false);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await updateWorkflow(workspaceId, workflowId, {
-        flow_definition: { nodes, edges },
-      });
+      await updateWorkflow(workspaceId, workflowId, { flow_definition: { nodes: nodes as any, edges: edges as any } });
       markClean();
     } catch (error) {
       console.error('Save error:', error);
@@ -46,68 +47,115 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ workspaceId, workflowId }
     }
   }, [workspaceId, workflowId, clearNodeStatuses, setRunning, setExecution]);
 
-  const btnClass =
-    'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors';
+  const iconBtn = (
+    onClick: () => void,
+    icon: React.ReactNode,
+    title: string
+  ) => (
+    <button
+      onClick={onClick}
+      title={title}
+      className="flex items-center justify-center w-7 h-7 rounded-lg transition-all"
+      style={{ color: 'var(--text-muted)', background: 'transparent' }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = 'var(--bg-hover)';
+        e.currentTarget.style.color = 'var(--text-secondary)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = 'var(--text-muted)';
+      }}
+    >
+      {icon}
+    </button>
+  );
 
   return (
-    <div className="flex items-center justify-between bg-white border-b border-gray-200 px-4 py-2">
+    <div
+      className="flex items-center justify-between px-3 py-2 shrink-0"
+      style={{
+        background: 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border-subtle)',
+      }}
+    >
+      {/* Left — back + name + save/run */}
       <div className="flex items-center gap-2">
         <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`${btnClass} ${
-            isDirty
-              ? 'bg-blue-500 text-white hover:bg-blue-600'
-              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-          }`}
+          onClick={() => navigate('/workflows')}
+          className="flex items-center gap-1.5 text-xs font-medium rounded-lg px-2 py-1.5 transition-all"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
         >
-          {saving ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Save className="w-3.5 h-3.5" />
-          )}
+          <ArrowLeft className="w-3.5 h-3.5" />
+        </button>
+
+        <div
+          className="w-px h-5"
+          style={{ background: 'var(--border-subtle)' }}
+        />
+
+        <span
+          className="text-sm font-semibold max-w-[200px] truncate"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          {workflowName || 'Untitled Workflow'}
+        </span>
+
+        {isDirty && (
+          <span
+            className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+            style={{ background: 'rgba(234,179,8,0.15)', color: '#facc15' }}
+          >
+            Unsaved
+          </span>
+        )}
+
+        <div
+          className="w-px h-5"
+          style={{ background: 'var(--border-subtle)' }}
+        />
+
+        {/* Save */}
+        <button
+          id="canvas-save-btn"
+          onClick={handleSave}
+          disabled={saving || !isDirty}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all"
+          style={{
+            background: isDirty ? 'rgba(99,102,241,0.15)' : 'transparent',
+            color: isDirty ? 'var(--accent-mid)' : 'var(--text-disabled)',
+            border: `1px solid ${isDirty ? 'rgba(99,102,241,0.3)' : 'transparent'}`,
+            cursor: !isDirty ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
           Save
         </button>
+
+        {/* Run */}
         <button
+          id="canvas-run-btn"
           onClick={handleRun}
           disabled={isRunning}
-          className={`${btnClass} ${
-            isRunning
-              ? 'bg-green-400 text-white cursor-not-allowed'
-              : 'bg-green-500 text-white hover:bg-green-600'
-          }`}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all"
+          style={{
+            background: isRunning ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.15)',
+            color: 'var(--status-success)',
+            border: '1px solid rgba(34,197,94,0.3)',
+            cursor: isRunning ? 'not-allowed' : 'pointer',
+          }}
         >
-          {isRunning ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Play className="w-3.5 h-3.5" />
-          )}
-          {isRunning ? 'Running...' : 'Run'}
+          {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+          {isRunning ? 'Running…' : 'Run'}
         </button>
       </div>
 
+      {/* Right — zoom controls */}
       <div className="flex items-center gap-1">
-        <button
-          onClick={() => zoomIn()}
-          className={`${btnClass} bg-gray-100 text-gray-600 hover:bg-gray-200`}
-          title="Zoom In"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => zoomOut()}
-          className={`${btnClass} bg-gray-100 text-gray-600 hover:bg-gray-200`}
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => fitView({ padding: 0.2 })}
-          className={`${btnClass} bg-gray-100 text-gray-600 hover:bg-gray-200`}
-          title="Fit View"
-        >
-          <Maximize className="w-3.5 h-3.5" />
-        </button>
+        {iconBtn(() => zoomIn(),           <ZoomIn className="w-3.5 h-3.5" />,    'Zoom In')}
+        {iconBtn(() => zoomOut(),          <ZoomOut className="w-3.5 h-3.5" />,   'Zoom Out')}
+        {iconBtn(() => fitView({ padding: 0.2 }), <Maximize className="w-3.5 h-3.5" />, 'Fit View')}
       </div>
     </div>
   );

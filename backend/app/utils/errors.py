@@ -2,8 +2,8 @@ from fastapi import HTTPException, status
 
 
 class AppException(HTTPException):
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(status_code=status_code, detail=detail)
+    def __init__(self, status_code: int, detail: str, headers: dict[str, str] | None = None):
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
 
 
 class NotFoundException(AppException):
@@ -19,6 +19,7 @@ class UnauthorizedException(AppException):
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=detail,
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
 

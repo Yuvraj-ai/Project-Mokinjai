@@ -16,7 +16,9 @@ class HttpRequestModule(BaseModule):
         context: ExecutionContext,
     ) -> dict[str, Any]:
         method = config.get("method", "GET").upper()
-        url = config.get("url", "")
+        url = config.get("url", "").strip()
+        if not url:
+            raise ValueError("HttpRequestModule: 'url' config is required but was not provided.")
         headers = config.get("headers", {})
         body = config.get("body", None)
         timeout = config.get("timeout", 30)
@@ -33,6 +35,8 @@ class HttpRequestModule(BaseModule):
                 headers=headers,
                 json=body if method in ("POST", "PUT", "PATCH") else None,
             )
+
+        response.raise_for_status()
 
         try:
             response_data = response.json()
