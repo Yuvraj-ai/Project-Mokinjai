@@ -20,7 +20,10 @@ class TransformModule(BaseModule):
 
         if transformation == "json_parse":
             if isinstance(input_value, str):
-                output = json.loads(input_value)
+                try:
+                    output = json.loads(input_value)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"TransformModule: Failed to parse JSON input: {e}") from e
             else:
                 output = input_value
         elif transformation == "json_stringify":

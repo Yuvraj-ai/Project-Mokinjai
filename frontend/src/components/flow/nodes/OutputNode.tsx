@@ -1,24 +1,30 @@
 import React from 'react';
 import { NodeProps } from '@xyflow/react';
+import { FileText } from 'lucide-react';
 import BaseNode from './BaseNode';
 
-const OUTPUT_COLOR = '#ef4444';
+const COLOR = 'var(--node-output)';
 
 const OutputNode: React.FC<NodeProps> = ({ data, selected }) => {
   const format = (data.format as string) || 'text';
 
   return (
-    <BaseNode label={data.label as string || 'Output'} color={OUTPUT_COLOR} selected={selected}>
+    <BaseNode
+      label={(data.label as string) || 'Output'}
+      accentColor={COLOR}
+      icon={<FileText className="w-3 h-3" />}
+      selected={selected}
+    >
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-medium text-gray-500 uppercase">Format</span>
+        <p className="node-field-label">Format</p>
         <span
-          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-            format === 'json'
-              ? 'bg-amber-100 text-amber-700'
-              : 'bg-gray-100 text-gray-700'
-          }`}
+          className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider"
+          style={{
+            background: format === 'json' ? 'rgba(234,179,8,0.15)' : 'rgba(249,115,22,0.15)',
+            color: format === 'json' ? '#facc15' : 'var(--node-output)',
+          }}
         >
-          {format.toUpperCase()}
+          {format}
         </span>
       </div>
     </BaseNode>

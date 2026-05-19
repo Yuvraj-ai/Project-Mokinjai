@@ -10,14 +10,7 @@ from app.engine.modules.registry import ModuleRegistry
 
 
 class WorkflowExecutor:
-    """Main workflow execution engine.
-
-    1. Loads workflow definition
-    2. Builds DAG and topological sort
-    3. Executes nodes in order, passing data through context
-    4. Handles conditional branching
-    5. Records execution trace
-    """
+    """Main workflow execution engine."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -43,14 +36,19 @@ class WorkflowExecutor:
             return execution
 
         # Start execution
+        start_time = time.time()
         execution.status = "running"
         execution.started_at = datetime.now(timezone.utc)
         await self.db.commit()
 
-        start_time = time.time()
+        context: ExecutionContext | None = None
 
         try:
+            # Load flow definition from workflow directly (SQLite JSON column)
             flow_def = workflow.flow_definition
+            if not flow_def:
+                raise ValueError("Flow definition not found")
+
             dag = DAGBuilder(flow_def)
             dag.validate()
 
@@ -59,7 +57,8 @@ class WorkflowExecutor:
 
             for node_id in sorted_nodes:
                 if context.is_skipped(node_id):
-                    context.add_trace_entry(node_id, "skipped", "skipped")
+                    node = dag.nodes[node_id]
+                    context.add_trace_entry(node_id, node["type"], "skipped")
                     continue
 
                 node = dag.nodes[node_id]
@@ -80,6 +79,9 @@ class WorkflowExecutor:
                     node_duration = int((time.time() - node_start) * 1000)
 
                     context.set_output(node_id, output)
+                    if node_type == "output":
+                        context.mark_as_final_output(node_id)
+
                     context.add_trace_entry(
                         node_id, node_type, "completed",
                         inputs=inputs, outputs=output, duration_ms=node_duration,
@@ -101,7 +103,6 @@ class WorkflowExecutor:
             total_time = int((time.time() - start_time) * 1000)
             execution.status = "completed"
             execution.output_data = context.get_final_output()
-            execution.execution_trace = {"nodes": context.trace}
             execution.execution_time_ms = total_time
             execution.token_usage = context.total_token_usage
             execution.completed_at = datetime.now(timezone.utc)
@@ -110,7 +111,10 @@ class WorkflowExecutor:
             total_time = int((time.time() - start_time) * 1000)
             execution.status = "failed"
             execution.error_message = str(e)
-            execution.execution_trace = {"nodes": context.trace} if 'context' in dir() else None
+
+            if context is not None:
+                execution.token_usage = context.total_token_usage
+
             execution.execution_time_ms = total_time
             execution.completed_at = datetime.now(timezone.utc)
 

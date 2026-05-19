@@ -4,40 +4,75 @@ import { Handle, Position } from '@xyflow/react';
 interface BaseNodeProps {
   children: React.ReactNode;
   label: string;
-  color: string;
+  accentColor: string;
+  icon?: React.ReactNode;
   selected?: boolean;
 }
 
-const BaseNode: React.FC<BaseNodeProps> = ({ children, label, color, selected }) => {
+const BaseNode: React.FC<BaseNodeProps> = ({ children, label, accentColor, icon, selected }) => {
   return (
     <div
-      className={`bg-white rounded-lg shadow-md min-w-[200px] max-w-[280px] border border-gray-200 transition-all duration-150 ${
-        selected ? 'ring-2 ring-blue-400 border-blue-400 shadow-lg' : ''
-      }`}
-      style={{ borderTopWidth: '3px', borderTopColor: color }}
+      className="node-card"
+      style={
+        {
+          '--node-accent': accentColor,
+          boxShadow: selected
+            ? `0 0 0 2px ${accentColor}40, var(--shadow-md)`
+            : 'var(--shadow-md)',
+          borderColor: selected ? `${accentColor}60` : undefined,
+        } as React.CSSProperties
+      }
     >
+      {/* Input handle — left */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3 !h-3 !bg-gray-400 !border-2 !border-white"
+        style={{
+          background: 'var(--text-muted)',
+          border: '2px solid var(--bg-elevated)',
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+        }}
       />
 
-      <div className="px-3 py-2 border-b border-gray-100">
-        <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className="node-header">
+        {icon ? (
           <div
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: color }}
+            className="flex items-center justify-center w-5 h-5 rounded flex-shrink-0"
+            style={{ background: `${accentColor}20`, color: accentColor }}
+          >
+            {icon}
+          </div>
+        ) : (
+          <div
+            className="node-dot"
+            style={{ background: accentColor }}
           />
-          <span className="text-xs font-semibold text-gray-700 truncate">{label}</span>
-        </div>
+        )}
+        <span
+          className="node-label flex-1 truncate"
+          style={{ color: accentColor }}
+        >
+          {label}
+        </span>
       </div>
 
-      <div className="px-3 py-2">{children}</div>
+      {/* Body */}
+      <div className="node-body">{children}</div>
 
+      {/* Output handle — right */}
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !bg-gray-400 !border-2 !border-white"
+        style={{
+          background: accentColor,
+          border: '2px solid var(--bg-elevated)',
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+        }}
       />
     </div>
   );
