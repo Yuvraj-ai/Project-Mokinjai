@@ -72,3 +72,13 @@ frontend/public/vite.svg
 *.bak
 *.tmp
 .claude/
+.mcp.json
+BACKEND_WALKTHROUGH.md
+CLI_AGENT_FULL_SETUP_GUIDE.md
+HANDOFF.md
+docs/GOD_MODE_PLAN_BACKEND.md
+docs/architecture/unified-memory-setup-for-aiagents.md
+docs/architecture/unified-memory.md
+docs/
+keys.txt
+
