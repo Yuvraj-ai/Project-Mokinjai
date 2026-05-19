@@ -1,92 +1,71 @@
 import React from 'react';
 import useWorkflowStore from '../../../store/workflowStore';
-import { X, Trash2 } from 'lucide-react';
+import { X } from 'lucide-react';
 
 const PropertiesPanel: React.FC = () => {
-  const selectedNodeId  = useWorkflowStore((s) => s.selectedNodeId);
+  const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId);
   const setSelectedNodeId = useWorkflowStore((s) => s.setSelectedNodeId);
-  const nodes           = useWorkflowStore((s) => s.nodes);
-  const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
-  const removeNode      = useWorkflowStore((s) => s.removeNode);
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
-  if (!selectedNode) return null;
+  if (!selectedNode) {
+    return (
+      <div className="w-72 bg-white border-l border-gray-200 h-full flex items-center justify-center">
+        <p className="text-xs text-gray-400">Select a node to edit properties</p>
+      </div>
+    );
+  }
 
   const { data, type } = selectedNode;
-  const update = (key: string, value: unknown) => updateNodeData(selectedNode.id, { [key]: value });
 
-  /* ── Style helpers ────────────────────────────── */
-  const fieldLabel = (text: string) => (
-    <label
-      className="block text-[10px] font-bold uppercase tracking-widest mb-1"
-      style={{ color: 'var(--text-disabled)' }}
-    >
+  const update = (key: string, value: unknown) => {
+    updateNodeData(selectedNode.id, { [key]: value });
+  };
+
+  const renderLabel = (text: string) => (
+    <label className="block text-[11px] font-medium text-gray-600 uppercase tracking-wide mb-1">
       {text}
     </label>
   );
 
-  const inputCls = `
-    w-full text-xs rounded-lg px-2.5 py-1.5 outline-none transition-all
-  `;
-  const inputStyle = {
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--border-default)',
-    color: 'var(--text-primary)',
-  };
-  const inputFocusHandlers = {
-    onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      e.currentTarget.style.borderColor = 'var(--accent-mid)';
-      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)';
-    },
-    onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      e.currentTarget.style.borderColor = 'var(--border-default)';
-      e.currentTarget.style.boxShadow = 'none';
-    },
-  };
-
   const renderInput = (key: string, label: string, placeholder?: string, inputType = 'text') => (
-    <div key={key}>
-      {fieldLabel(label)}
+    <div>
+      {renderLabel(label)}
       <input
         type={inputType}
         value={(data[key] as string) || ''}
         onChange={(e) => update(key, inputType === 'number' ? Number(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        className={inputCls}
-        style={inputStyle}
-        {...inputFocusHandlers}
+        className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-1.5 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
       />
     </div>
   );
 
   const renderTextarea = (key: string, label: string, placeholder?: string, rows = 4) => (
-    <div key={key}>
-      {fieldLabel(label)}
+    <div>
+      {renderLabel(label)}
       <textarea
         value={(data[key] as string) || ''}
         onChange={(e) => update(key, e.target.value)}
         placeholder={placeholder}
         rows={rows}
-        className={`${inputCls} font-mono resize-none leading-relaxed`}
-        style={inputStyle}
-        {...inputFocusHandlers}
+        className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-1.5 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 resize-none font-mono"
       />
     </div>
   );
 
   const renderSelect = (key: string, label: string, options: { value: string; label: string }[]) => (
-    <div key={key}>
-      {fieldLabel(label)}
+    <div>
+      {renderLabel(label)}
       <select
         value={(data[key] as string) || options[0]?.value || ''}
         onChange={(e) => update(key, e.target.value)}
-        className={inputCls}
-        style={{ ...inputStyle, appearance: 'none' }}
-        {...inputFocusHandlers}
+        className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-1.5 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-elevated)' }}>
+          <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
         ))}
@@ -97,8 +76,8 @@ const PropertiesPanel: React.FC = () => {
   const renderSlider = (key: string, label: string, min: number, max: number, step: number) => {
     const value = (data[key] as number) ?? min;
     return (
-      <div key={key}>
-        {fieldLabel(`${label}: ${value}`)}
+      <div>
+        {renderLabel(`${label}: ${value}`)}
         <input
           type="range"
           min={min}
@@ -106,8 +85,7 @@ const PropertiesPanel: React.FC = () => {
           step={step}
           value={value}
           onChange={(e) => update(key, parseFloat(e.target.value))}
-          className="w-full"
-          style={{ accentColor: 'var(--accent-mid)' }}
+          className="w-full accent-blue-500"
         />
       </div>
     );
@@ -121,10 +99,9 @@ const PropertiesPanel: React.FC = () => {
             {renderSelect('provider', 'Provider', [
               { value: 'openai', label: 'OpenAI' },
               { value: 'anthropic', label: 'Anthropic' },
-              { value: 'google', label: 'Google Gemini' },
             ])}
-            {renderInput('model', 'Model', 'e.g. gpt-4o, claude-3-5-sonnet, gemini-2.0-flash')}
-            {renderTextarea('systemPrompt', 'System Prompt', 'You are a helpful assistant…', 5)}
+            {renderInput('model', 'Model', 'e.g. gpt-4o')}
+            {renderTextarea('systemPrompt', 'System Prompt', 'Enter system prompt...', 5)}
             {renderSlider('temperature', 'Temperature', 0, 2, 0.1)}
             {renderInput('maxTokens', 'Max Tokens', '4096', 'number')}
           </>
@@ -133,10 +110,10 @@ const PropertiesPanel: React.FC = () => {
       case 'prompt':
         return (
           <>
-            {renderTextarea('template', 'Template', 'Enter prompt with {{variable}} syntax…', 6)}
+            {renderTextarea('template', 'Template', 'Enter prompt template with {{variables}}...', 6)}
             <div>
-              {fieldLabel('Variables')}
-              <div className="space-y-1.5">
+              {renderLabel('Variables')}
+              <div className="space-y-1">
                 {((data.variables as string[]) || []).map((v: string, i: number) => (
                   <div key={i} className="flex items-center gap-1.5">
                     <input
@@ -147,9 +124,7 @@ const PropertiesPanel: React.FC = () => {
                         vars[i] = e.target.value;
                         update('variables', vars);
                       }}
-                      className={`flex-1 ${inputCls}`}
-                      style={inputStyle}
-                      {...inputFocusHandlers}
+                      className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
                     />
                     <button
                       onClick={() => {
@@ -158,19 +133,17 @@ const PropertiesPanel: React.FC = () => {
                         );
                         update('variables', vars);
                       }}
-                      className="w-6 h-6 flex items-center justify-center rounded transition-colors flex-shrink-0"
-                      style={{ color: '#f87171' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      className="text-red-400 hover:text-red-600 p-0.5"
                     >
                       <X className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
                 <button
-                  onClick={() => update('variables', [...((data.variables as string[]) || []), ''])}
-                  className="text-[10px] font-semibold transition-colors"
-                  style={{ color: 'var(--accent-mid)' }}
+                  onClick={() =>
+                    update('variables', [...((data.variables as string[]) || []), ''])
+                  }
+                  className="text-[10px] text-blue-500 hover:text-blue-700 font-medium"
                 >
                   + Add Variable
                 </button>
@@ -179,27 +152,27 @@ const PropertiesPanel: React.FC = () => {
           </>
         );
 
-      case 'input':
-        return renderTextarea('value', 'Initial Value', 'Enter input value…', 5);
-
       case 'output':
         return renderSelect('format', 'Format', [
           { value: 'text', label: 'Text' },
           { value: 'json', label: 'JSON' },
         ]);
 
+      case 'input':
+        return renderTextarea('value', 'Initial Value', 'Enter input value...', 5);
+
       case 'conditional':
         return (
           <>
             {renderSelect('conditionType', 'Condition Type', [
-              { value: 'equals',       label: 'Equals' },
-              { value: 'not_equals',   label: 'Not Equals' },
-              { value: 'contains',     label: 'Contains' },
+              { value: 'equals', label: 'Equals' },
+              { value: 'not_equals', label: 'Not Equals' },
+              { value: 'contains', label: 'Contains' },
               { value: 'not_contains', label: 'Not Contains' },
               { value: 'greater_than', label: 'Greater Than' },
-              { value: 'less_than',    label: 'Less Than' },
-              { value: 'regex',        label: 'Regex Match' },
-              { value: 'is_empty',     label: 'Is Empty' },
+              { value: 'less_than', label: 'Less Than' },
+              { value: 'regex', label: 'Regex Match' },
+              { value: 'is_empty', label: 'Is Empty' },
             ])}
             {renderInput('conditionValue', 'Condition Value', 'Value to compare against')}
           </>
@@ -209,18 +182,18 @@ const PropertiesPanel: React.FC = () => {
         return (
           <>
             {renderSelect('transformation', 'Transformation', [
-              { value: 'passthrough',   label: 'Passthrough' },
-              { value: 'uppercase',     label: 'Uppercase' },
-              { value: 'lowercase',     label: 'Lowercase' },
-              { value: 'trim',          label: 'Trim' },
-              { value: 'split',         label: 'Split' },
-              { value: 'join',          label: 'Join' },
+              { value: 'passthrough', label: 'Passthrough' },
+              { value: 'uppercase', label: 'Uppercase' },
+              { value: 'lowercase', label: 'Lowercase' },
+              { value: 'trim', label: 'Trim' },
+              { value: 'split', label: 'Split' },
+              { value: 'join', label: 'Join' },
               { value: 'extract_field', label: 'Extract Field' },
-              { value: 'parse_json',    label: 'Parse JSON' },
-              { value: 'stringify',     label: 'Stringify' },
+              { value: 'parse_json', label: 'Parse JSON' },
+              { value: 'stringify', label: 'Stringify' },
             ])}
             {renderInput('field', 'Field Path', 'e.g. data.results[0].name')}
-            {renderInput('delimiter', 'Delimiter', 'e.g. , or \\n')}
+            {renderInput('delimiter', 'Delimiter', 'e.g. comma, newline')}
           </>
         );
 
@@ -228,15 +201,15 @@ const PropertiesPanel: React.FC = () => {
         return (
           <>
             {renderSelect('method', 'Method', [
-              { value: 'GET',    label: 'GET' },
-              { value: 'POST',   label: 'POST' },
-              { value: 'PUT',    label: 'PUT' },
-              { value: 'PATCH',  label: 'PATCH' },
+              { value: 'GET', label: 'GET' },
+              { value: 'POST', label: 'POST' },
+              { value: 'PUT', label: 'PUT' },
+              { value: 'PATCH', label: 'PATCH' },
               { value: 'DELETE', label: 'DELETE' },
             ])}
             {renderInput('url', 'URL', 'https://api.example.com/endpoint')}
-            {renderTextarea('headers', 'Headers (JSON)', '{"Authorization": "Bearer …"}', 3)}
-            {renderTextarea('body', 'Body', 'Request body…', 4)}
+            {renderTextarea('headers', 'Headers (JSON)', '{"Authorization": "Bearer ..."}', 3)}
+            {renderTextarea('body', 'Body', 'Request body...', 4)}
           </>
         );
 
@@ -250,82 +223,28 @@ const PropertiesPanel: React.FC = () => {
         );
 
       default:
-        return (
-          <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>
-            No configurable properties for this node type.
-          </p>
-        );
+        return <p className="text-xs text-gray-400">No properties for this node type.</p>;
     }
   };
 
-  const nodeTypeColor: Record<string, string> = {
-    input: 'var(--node-input)',
-    agent: 'var(--node-agent)',
-    prompt: 'var(--node-prompt)',
-    output: 'var(--node-output)',
-    conditional: 'var(--node-conditional)',
-    transform: 'var(--node-transform)',
-    http_request: 'var(--node-http)',
-    knowledge: 'var(--node-knowledge)',
-  };
-
-  const accentColor = nodeTypeColor[type || ''] || 'var(--accent-mid)';
-
   return (
-    <div
-      className="w-72 h-full overflow-y-auto flex flex-col animate-slide-in"
-      style={{
-        background: 'var(--bg-surface)',
-        borderLeft: '1px solid var(--border-subtle)',
-      }}
-    >
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-3 shrink-0"
-        style={{ borderBottom: '1px solid var(--border-subtle)' }}
-      >
-        <div className="flex items-center gap-2">
-          <div
-            className="w-2 h-2 rounded-full"
-            style={{ background: accentColor }}
-          />
-          <div>
-            <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Properties</p>
-            <p className="text-[9px] uppercase tracking-wider capitalize" style={{ color: accentColor }}>
-              {type?.replace('_', ' ')} node
-            </p>
-          </div>
+    <div className="w-72 bg-white border-l border-gray-200 h-full overflow-y-auto">
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">Properties</h2>
+          <p className="text-[10px] text-gray-500 mt-0.5 capitalize">{type} node</p>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => { removeNode(selectedNode.id); setSelectedNodeId(null); }}
-            title="Delete node"
-            className="w-6 h-6 rounded flex items-center justify-center transition-all"
-            style={{ color: '#f87171' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setSelectedNodeId(null)}
-            className="w-6 h-6 rounded flex items-center justify-center transition-all"
-            style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button
+          onClick={() => setSelectedNodeId(null)}
+          className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Fields */}
-      <div className="p-4 space-y-4 flex-1">
+      <div className="p-4 space-y-3">
         {renderInput('label', 'Label', 'Node label')}
-        <div
-          className="h-px"
-          style={{ background: 'var(--border-subtle)' }}
-        />
+        <hr className="border-gray-100" />
         {renderFields()}
       </div>
     </div>

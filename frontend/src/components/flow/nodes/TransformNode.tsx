@@ -1,38 +1,29 @@
 import React from 'react';
 import { NodeProps } from '@xyflow/react';
-import { Shuffle } from 'lucide-react';
 import BaseNode from './BaseNode';
 
-const COLOR = 'var(--node-transform)';
-
-const transformLabels: Record<string, string> = {
-  passthrough:   'Passthrough',
-  uppercase:     'Uppercase',
-  lowercase:     'Lowercase',
-  trim:          'Trim',
-  split:         'Split',
-  join:          'Join',
-  extract_field: 'Extract Field',
-  parse_json:    'Parse JSON',
-  stringify:     'Stringify',
-};
+const TRANSFORM_COLOR = '#06b6d4';
 
 const TransformNode: React.FC<NodeProps> = ({ data, selected }) => {
   const transformation = (data.transformation as string) || 'passthrough';
 
+  const transformLabels: Record<string, string> = {
+    passthrough: 'Passthrough',
+    uppercase: 'Uppercase',
+    lowercase: 'Lowercase',
+    trim: 'Trim',
+    split: 'Split',
+    join: 'Join',
+    extract_field: 'Extract Field',
+    parse_json: 'Parse JSON',
+    stringify: 'Stringify',
+  };
+
   return (
-    <BaseNode
-      label={(data.label as string) || 'Transform'}
-      accentColor={COLOR}
-      icon={<Shuffle className="w-3 h-3" />}
-      selected={selected}
-    >
+    <BaseNode label={data.label as string || 'Transform'} color={TRANSFORM_COLOR} selected={selected}>
       <div className="flex items-center gap-2">
-        <p className="node-field-label">Type</p>
-        <span
-          className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide"
-          style={{ background: 'rgba(6,182,212,0.15)', color: 'var(--node-transform)' }}
-        >
+        <span className="text-[10px] font-medium text-gray-500 uppercase">Type</span>
+        <span className="text-xs font-semibold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded">
           {transformLabels[transformation] || transformation}
         </span>
       </div>
