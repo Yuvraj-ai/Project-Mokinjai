@@ -79,6 +79,9 @@ class DAGBuilder:
         if not self.nodes:
             raise BadRequestException("Workflow has no nodes")
 
+        if self.detect_cycles():
+            raise BadRequestException("Workflow contains a cycle")
+
         # Check all edge references exist
         for edge in self.edges:
             if edge["source"] not in self.nodes:

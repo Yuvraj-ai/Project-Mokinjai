@@ -1,17 +1,14 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel
 from datetime import datetime
-from typing import Literal
 
-WorkspaceRole = Literal["owner", "admin", "editor", "viewer"]
-AssignableWorkspaceRole = Literal["admin", "editor", "viewer"]
 
 class WorkspaceCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1, max_length=255)
+    name: str
+
 
 class WorkspaceUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: str | None = Field(default=None, min_length=1, max_length=255)
+    name: str | None = None
+
 
 class WorkspaceResponse(BaseModel):
     id: str
@@ -22,15 +19,16 @@ class WorkspaceResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
 class MemberAdd(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     user_id: str
-    role: AssignableWorkspaceRole = "viewer"
+    role: str = "viewer"  # owner, admin, editor, viewer
+
 
 class MemberResponse(BaseModel):
     workspace_id: str
     user_id: str
-    role: WorkspaceRole
+    role: str
     user_email: str | None = None
     user_name: str | None = None
 
