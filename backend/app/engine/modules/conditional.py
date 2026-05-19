@@ -40,7 +40,10 @@ class ConditionalModule(BaseModule):
         elif condition_type == "not_equals":
             return input_str.strip() != condition_value.strip()
         elif condition_type == "regex":
-            return bool(re.search(condition_value, input_str))
+            try:
+                return bool(re.search(condition_value, input_str))
+            except re.error as e:
+                raise ValueError(f"ConditionalModule: invalid regex pattern '{condition_value}': {e}") from e
         elif condition_type == "greater_than":
             try:
                 return float(input_str) > float(condition_value)
