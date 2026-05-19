@@ -20,29 +20,12 @@ export default function WorkflowEditorPage() {
 
   useEffect(() => {
     async function load() {
-      if (!workflowId) return
-
       try {
-        // First, try to find which workspace owns this workflow
         const workspaces = await listWorkspaces()
-
-        let foundWorkspaceId: string | null = null
-        let workflow = null
-
-        // Check each workspace for this workflow
-        for (const ws of workspaces) {
-          try {
-            workflow = await getWorkflow(ws.id, workflowId)
-            foundWorkspaceId = ws.id
-            break
-          } catch {
-            // Workflow not in this workspace, continue to next
-            continue
-          }
-        }
-
-        if (foundWorkspaceId && workflow) {
-          setWorkspaceId(foundWorkspaceId)
+        if (workspaces.length > 0 && workflowId) {
+          const wsId = workspaces[0].id
+          setWorkspaceId(wsId)
+          const workflow = await getWorkflow(wsId, workflowId)
           setWorkflowMeta(workflow.id, workflow.name, workflow.description || '')
           const flowDef = workflow.flow_definition || { nodes: [], edges: [] }
           setNodes(

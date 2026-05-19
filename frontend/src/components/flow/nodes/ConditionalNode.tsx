@@ -1,81 +1,62 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { GitBranch } from 'lucide-react';
 import BaseNode from './BaseNode';
 
-const COLOR = 'var(--node-conditional)';
+const CONDITIONAL_COLOR = '#f59e0b';
 
 const ConditionalNode: React.FC<NodeProps> = ({ data, selected }) => {
-  const conditionType  = (data.conditionType as string) || 'equals';
+  const conditionType = (data.conditionType as string) || 'equals';
   const conditionValue = (data.conditionValue as string) || '';
 
   return (
     <div className="relative">
-      <BaseNode
-        label={(data.label as string) || 'Conditional'}
-        accentColor={COLOR}
-        icon={<GitBranch className="w-3 h-3" />}
-        selected={selected}
-      >
+      <BaseNode label={data.label as string || 'Conditional'} color={CONDITIONAL_COLOR} selected={selected}>
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
-            <p className="node-field-label">Type</p>
-            <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide"
-              style={{ background: 'rgba(234,179,8,0.15)', color: 'var(--node-conditional)' }}
-            >
+            <span className="text-[10px] font-medium text-gray-500 uppercase">Type</span>
+            <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded">
               {conditionType}
             </span>
           </div>
           {conditionValue && (
             <div className="flex items-center gap-1.5">
-              <p className="node-field-label">Value</p>
-              <span className="text-[10px] truncate max-w-[130px]" style={{ color: 'var(--text-secondary)' }}>
+              <span className="text-[10px] font-medium text-gray-500 uppercase">Value</span>
+              <span className="text-xs text-gray-600 truncate max-w-[140px]">
                 {conditionValue}
               </span>
             </div>
           )}
         </div>
+
+        {/* Override the default single source handle from BaseNode */}
       </BaseNode>
 
-      {/* True branch handle */}
+      {/* True branch handle (top-right) */}
       <Handle
         type="source"
         position={Position.Right}
         id="true"
-        style={{
-          top: '38%',
-          background: 'var(--status-success)',
-          border: '2px solid var(--bg-elevated)',
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-        }}
+        style={{ top: '35%' }}
+        className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
       />
       <span
-        className="absolute text-[8px] font-bold pointer-events-none"
-        style={{ right: 14, top: 'calc(38% - 7px)', color: 'var(--status-success)' }}
+        className="absolute text-[9px] font-bold text-green-600 pointer-events-none"
+        style={{ right: 16, top: 'calc(35% - 6px)' }}
       >
         T
       </span>
 
-      {/* False branch handle */}
+      {/* False branch handle (bottom-right) */}
       <Handle
         type="source"
         position={Position.Right}
         id="false"
-        style={{
-          top: '68%',
-          background: 'var(--status-error)',
-          border: '2px solid var(--bg-elevated)',
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-        }}
+        style={{ top: '70%' }}
+        className="!w-3 !h-3 !bg-red-500 !border-2 !border-white"
       />
       <span
-        className="absolute text-[8px] font-bold pointer-events-none"
-        style={{ right: 14, top: 'calc(68% - 7px)', color: 'var(--status-error)' }}
+        className="absolute text-[9px] font-bold text-red-600 pointer-events-none"
+        style={{ right: 16, top: 'calc(70% - 6px)' }}
       >
         F
       </span>

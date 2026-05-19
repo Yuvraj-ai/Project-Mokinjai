@@ -11,10 +11,6 @@ class ExecutionContext:
         self.trace: list[dict] = []
         self.total_token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         self.skipped_nodes: set[str] = set()
-        self._final_output_node_id: str | None = None
-
-    def mark_as_final_output(self, node_id: str):
-        self._final_output_node_id = node_id
 
     def set_output(self, node_id: str, data: dict[str, Any]):
         self.node_outputs[node_id] = data
@@ -40,8 +36,6 @@ class ExecutionContext:
                     inputs["input"] = parent_output["output"]
                 elif "response" in parent_output:
                     inputs["input"] = parent_output["response"]
-                else:
-                    inputs["input"] = parent_output
 
         return inputs
 
@@ -80,5 +74,6 @@ class ExecutionContext:
         """Return the output of the last executed node."""
         if not self.node_outputs:
             return {}
+        # Return the last node's output
         last_key = list(self.node_outputs.keys())[-1]
         return self.node_outputs[last_key]

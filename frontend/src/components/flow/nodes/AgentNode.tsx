@@ -1,62 +1,51 @@
 import React from 'react';
 import { NodeProps } from '@xyflow/react';
-import { Bot } from 'lucide-react';
 import BaseNode from './BaseNode';
 import useWorkflowStore from '../../../store/workflowStore';
 
-const COLOR = 'var(--node-agent)';
+const AGENT_COLOR = '#8b5cf6';
 
 const AgentNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
 
-  const provider    = (data.provider as string) || 'openai';
-  const model       = (data.model as string) || '';
+  const provider = (data.provider as string) || 'openai';
+  const model = (data.model as string) || '';
   const temperature = (data.temperature as number) ?? 0.7;
 
   return (
-    <BaseNode
-      label={(data.label as string) || 'Agent'}
-      accentColor={COLOR}
-      icon={<Bot className="w-3 h-3" />}
-      selected={selected}
-    >
+    <BaseNode label={data.label as string || 'Agent'} color={AGENT_COLOR} selected={selected}>
       <div className="space-y-2">
         <div>
-          <p className="node-field-label">Provider</p>
+          <label className="text-[10px] font-medium text-gray-500 uppercase">Provider</label>
           <select
             value={provider}
             onChange={(e) => updateNodeData(id, { provider: e.target.value })}
-            className="node-select"
+            className="w-full text-xs border border-gray-200 rounded px-2 py-1 mt-0.5 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-purple-400"
           >
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
-            <option value="google">Google Gemini</option>
           </select>
         </div>
 
         <div>
-          <p className="node-field-label">Model</p>
+          <label className="text-[10px] font-medium text-gray-500 uppercase">Model</label>
           <input
             type="text"
             value={model}
             onChange={(e) => updateNodeData(id, { model: e.target.value })}
-            placeholder={provider === 'openai' ? 'gpt-4o' : provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'gemini-2.0-flash'}
-            className="node-input"
+            placeholder="e.g. gpt-4o"
+            className="w-full text-xs border border-gray-200 rounded px-2 py-1 mt-0.5 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-purple-400"
           />
         </div>
 
         <div>
-          <p className="node-field-label">Temperature: {temperature.toFixed(1)}</p>
-          <div
-            className="w-full rounded-full h-1.5 mt-1 overflow-hidden"
-            style={{ background: 'var(--bg-overlay)' }}
-          >
+          <label className="text-[10px] font-medium text-gray-500 uppercase">
+            Temperature: {temperature.toFixed(1)}
+          </label>
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
             <div
-              className="h-1.5 rounded-full transition-all"
-              style={{
-                width: `${temperature * 100}%`,
-                background: `linear-gradient(90deg, var(--node-agent), #7c3aed)`,
-              }}
+              className="bg-purple-500 h-1.5 rounded-full transition-all"
+              style={{ width: `${temperature * 100}%` }}
             />
           </div>
         </div>

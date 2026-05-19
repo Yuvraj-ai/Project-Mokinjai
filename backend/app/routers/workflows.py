@@ -91,10 +91,7 @@ async def get_workflow(
     workflow = result.scalar_one_or_none()
     if workflow is None:
         raise NotFoundException("Workflow")
-
-    response_data = WorkflowResponse.model_validate(workflow)
-    response_data.flow_definition = workflow.flow_definition or {}
-    return response_data
+    return workflow
 
 
 @router.put("/{workflow_id}", response_model=WorkflowResponse)
@@ -157,7 +154,6 @@ async def delete_workflow(
 
     await db.delete(workflow)
     await db.commit()
-
     return {"success": True}
 
 

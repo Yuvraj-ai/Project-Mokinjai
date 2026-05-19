@@ -94,13 +94,7 @@ async def list_executions(
     result = await db.execute(query)
     executions = result.scalars().all()
 
-    execution_responses = []
-    for e in executions:
-        res = ExecutionResponse.model_validate(e)
-        res.execution_trace = None
-        execution_responses.append(res)
-
-    return ExecutionListResponse(executions=execution_responses, total=total)
+    return ExecutionListResponse(executions=executions, total=total)
 
 
 @router.get("/executions/{execution_id}", response_model=ExecutionResponse)
