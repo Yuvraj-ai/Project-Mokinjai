@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timezone
 from app.database import get_db
+from app.logging import logger
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.models.workflow import Workflow, WorkflowVersion
@@ -27,6 +28,7 @@ async def create_workflow(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"User {current_user.id} creating workflow '{request.name}' in workspace {workspace_id}")
     workflow = Workflow(
         workspace_id=workspace_id,
         name=request.name,
@@ -37,6 +39,7 @@ async def create_workflow(
     db.add(workflow)
     await db.commit()
     await db.refresh(workflow)
+    logger.info(f"Workflow {workflow.id} created")
     return workflow
 
 
@@ -50,6 +53,7 @@ async def list_workflows(
     status: str | None = None,
     search: str | None = None,
 ):
+    logger.debug(f"Listing workflows in workspace {workspace_id} (page={page}, limit={limit})")
     query = select(Workflow).where(Workflow.workspace_id == workspace_id)
     count_query = select(func.count()).select_from(Workflow).where(Workflow.workspace_id == workspace_id)
 
@@ -62,11 +66,9 @@ async def list_workflows(
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 
-    # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    # Get paginated results
     offset = (page - 1) * limit
     query = query.order_by(Workflow.updated_at.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
@@ -90,6 +92,7 @@ async def get_workflow(
     )
     workflow = result.scalar_one_or_none()
     if workflow is None:
+        logger.warning(f"Workflow {workflow_id} not found in workspace {workspace_id}")
         raise NotFoundException("Workflow")
     return workflow
 
@@ -103,6 +106,7 @@ async def update_workflow(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Updating workflow {workflow_id}")
     result = await db.execute(
         select(Workflow).where(
             Workflow.id == workflow_id,
@@ -111,6 +115,7 @@ async def update_workflow(
     )
     workflow = result.scalar_one_or_none()
     if workflow is None:
+        logger.warning(f"Workflow {workflow_id} not found")
         raise NotFoundException("Workflow")
 
     if request.name is not None:
@@ -121,7 +126,6 @@ async def update_workflow(
         workflow.flow_definition = request.flow_definition.model_dump()
         workflow.version += 1
 
-        # Save version snapshot
         version = WorkflowVersion(
             workflow_id=workflow.id,
             version=workflow.version,
@@ -129,9 +133,11 @@ async def update_workflow(
             created_by=current_user.id,
         )
         db.add(version)
+        logger.info(f"Workflow {workflow_id} saved as version {workflow.version}")
 
     await db.commit()
     await db.refresh(workflow)
+    logger.info(f"Workflow {workflow_id} updated")
     return workflow
 
 
@@ -142,6 +148,7 @@ async def delete_workflow(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Deleting workflow {workflow_id}")
     result = await db.execute(
         select(Workflow).where(
             Workflow.id == workflow_id,
@@ -150,10 +157,12 @@ async def delete_workflow(
     )
     workflow = result.scalar_one_or_none()
     if workflow is None:
+        logger.warning(f"Workflow {workflow_id} not found")
         raise NotFoundException("Workflow")
 
     await db.delete(workflow)
     await db.commit()
+    logger.info(f"Workflow {workflow_id} deleted")
     return {"success": True}
 
 
@@ -164,6 +173,7 @@ async def publish_workflow(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Publishing workflow {workflow_id}")
     result = await db.execute(
         select(Workflow).where(
             Workflow.id == workflow_id,
@@ -172,10 +182,12 @@ async def publish_workflow(
     )
     workflow = result.scalar_one_or_none()
     if workflow is None:
+        logger.warning(f"Workflow {workflow_id} not found")
         raise NotFoundException("Workflow")
 
     workflow.status = "published"
     workflow.published_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(workflow)
+    logger.info(f"Workflow {workflow_id} published")
     return workflow

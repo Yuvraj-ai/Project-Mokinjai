@@ -1,4 +1,5 @@
 import asyncio
+from app.logging import logger
 from app.workers.celery_app import celery_app
 from app.database import async_session
 from app.engine.executor import WorkflowExecutor
@@ -7,10 +8,15 @@ from app.engine.executor import WorkflowExecutor
 @celery_app.task(name="run_workflow", bind=True, max_retries=3)
 def run_workflow_task(self, execution_id: str):
     """Celery task to execute a workflow asynchronously."""
+    logger.info(f"Celery task starting for execution {execution_id} (attempt {self.request.retries + 1})")
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(_execute(execution_id))
+        logger.info(f"Celery task completed for execution {execution_id}")
+    except Exception as e:
+        logger.error(f"Celery task failed for execution {execution_id}: {e}")
+        raise
     finally:
         loop.close()
 

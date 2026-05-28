@@ -1,4 +1,5 @@
 from collections import defaultdict, deque
+from app.logging import logger
 from app.utils.errors import BadRequestException
 
 
@@ -24,7 +25,6 @@ class DAGBuilder:
             self.in_degree[tgt] = self.in_degree.get(tgt, 0) + 1
 
     def detect_cycles(self) -> bool:
-        """Returns True if the graph contains a cycle."""
         visited = set()
         rec_stack = set()
 
@@ -47,8 +47,6 @@ class DAGBuilder:
         return False
 
     def topological_sort(self) -> list[str]:
-        """Kahn's algorithm for topological sorting.
-        Raises BadRequestException if cycle detected."""
         in_degree = dict(self.in_degree)
         queue = deque([nid for nid, deg in in_degree.items() if deg == 0])
         sorted_nodes = []
@@ -67,24 +65,24 @@ class DAGBuilder:
         return sorted_nodes
 
     def get_parents(self, node_id: str) -> list[str]:
-        """Get all parent node IDs for a given node."""
         return self.reverse_adjacency.get(node_id, [])
 
     def get_children(self, node_id: str) -> list[str]:
-        """Get all child node IDs for a given node."""
         return self.adjacency.get(node_id, [])
 
     def validate(self):
-        """Validate the flow definition."""
         if not self.nodes:
+            logger.warning("DAG validation failed: no nodes")
             raise BadRequestException("Workflow has no nodes")
 
         if self.detect_cycles():
+            logger.warning("DAG validation failed: workflow contains a cycle")
             raise BadRequestException("Workflow contains a cycle")
 
-        # Check all edge references exist
         for edge in self.edges:
             if edge["source"] not in self.nodes:
                 raise BadRequestException(f"Edge references unknown source node: {edge['source']}")
             if edge["target"] not in self.nodes:
                 raise BadRequestException(f"Edge references unknown target node: {edge['target']}")
+
+        logger.debug(f"DAG validated: {len(self.nodes)} nodes, {len(self.edges)} edges")

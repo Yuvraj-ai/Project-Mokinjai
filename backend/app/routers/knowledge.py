@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
+from app.logging import logger
 from app.models.workspace import WorkspaceMember
 from app.models.knowledge import KnowledgeBase
 from app.schemas.knowledge import KnowledgeBaseCreate, KnowledgeBaseResponse
@@ -18,6 +19,7 @@ async def create_knowledge_base(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Creating knowledge base '{request.name}' in workspace {workspace_id}")
     kb = KnowledgeBase(
         workspace_id=workspace_id,
         name=request.name,
@@ -28,6 +30,7 @@ async def create_knowledge_base(
     db.add(kb)
     await db.commit()
     await db.refresh(kb)
+    logger.info(f"Knowledge base {kb.id} created")
     return kb
 
 
@@ -37,6 +40,7 @@ async def list_knowledge_bases(
     _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.debug(f"Listing knowledge bases for workspace {workspace_id}")
     result = await db.execute(
         select(KnowledgeBase).where(KnowledgeBase.workspace_id == workspace_id)
     )
@@ -58,6 +62,7 @@ async def get_knowledge_base(
     )
     kb = result.scalar_one_or_none()
     if kb is None:
+        logger.warning(f"Knowledge base {kb_id} not found in workspace {workspace_id}")
         raise NotFoundException("Knowledge base")
     return kb
 
@@ -69,6 +74,7 @@ async def delete_knowledge_base(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Deleting knowledge base {kb_id}")
     result = await db.execute(
         select(KnowledgeBase).where(
             KnowledgeBase.id == kb_id,
@@ -77,8 +83,10 @@ async def delete_knowledge_base(
     )
     kb = result.scalar_one_or_none()
     if kb is None:
+        logger.warning(f"Knowledge base {kb_id} not found")
         raise NotFoundException("Knowledge base")
 
     await db.delete(kb)
     await db.commit()
+    logger.info(f"Knowledge base {kb_id} deleted")
     return {"success": True}

@@ -2,9 +2,9 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
+from app.logging import logger
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
-from app.middleware.auth import get_current_user
 from app.utils.errors import ForbiddenException, NotFoundException
 
 ROLE_HIERARCHY = {"owner": 4, "admin": 3, "editor": 2, "viewer": 1}
@@ -25,12 +25,17 @@ def require_workspace_role(min_role: str = "viewer"):
         member = result.scalar_one_or_none()
 
         if member is None:
+            logger.warning(f"RBAC denied: user {current_user.id} not member of workspace {workspace_id}")
             raise NotFoundException("Workspace")
 
         min_level = ROLE_HIERARCHY.get(min_role, 0)
         user_level = ROLE_HIERARCHY.get(member.role, 0)
 
         if user_level < min_level:
+            logger.warning(
+                f"RBAC denied: user {current_user.id} (role={member.role}) "
+                f"needs at least '{min_role}' in workspace {workspace_id}"
+            )
             raise ForbiddenException("Insufficient permissions for this workspace")
 
         return member

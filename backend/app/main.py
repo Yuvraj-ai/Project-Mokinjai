@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
+from app.logging import logger
 from app.routers import auth, workspaces, workflows, executions, knowledge
 from app.websocket.execution_ws import execution_websocket
 
@@ -10,9 +11,10 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    logger.info("Application startup — AI Agent Builder API initializing")
+    logger.info(f"CORS allowed origin: {settings.FRONTEND_URL}")
     yield
-    # Shutdown
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
@@ -29,6 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"{request.method} {request.url.path}")
+    response = await call_next(request)
+    logger.info(f"{request.method} {request.url.path} — status: {response.status_code}")
+    return response
+
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
 app.include_router(workflows.router, prefix="/api/workspaces/{workspace_id}/workflows", tags=["workflows"])
@@ -38,9 +48,11 @@ app.include_router(knowledge.router, prefix="/api/workspaces/{workspace_id}/know
 
 @app.get("/health")
 async def health_check():
+    logger.debug("Health check requested")
     return {"status": "ok"}
 
 
 @app.websocket("/ws/executions/{execution_id}")
 async def ws_execution(websocket: WebSocket, execution_id: str):
+    logger.info(f"WebSocket connection opened for execution {execution_id}")
     await execution_websocket(websocket, execution_id)

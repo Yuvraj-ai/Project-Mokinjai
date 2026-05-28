@@ -1,4 +1,5 @@
 from typing import Any
+from app.logging import logger
 from app.engine.modules.base import BaseModule
 from app.engine.modules.agent import AgentModule
 from app.engine.modules.prompt import PromptModule
@@ -34,12 +35,14 @@ class ModuleRegistry:
     def get_module(cls, node_type: str) -> BaseModule:
         module_class = cls._modules.get(node_type)
         if module_class is None:
+            logger.error(f"Unknown module type requested: {node_type}")
             raise ValueError(f"Unknown module type: {node_type}")
         return module_class()
 
     @classmethod
     def register(cls, node_type: str, module_class: type[BaseModule]):
         cls._modules[node_type] = module_class
+        logger.info(f"Module registered: {node_type}")
 
     @classmethod
     def list_types(cls) -> list[str]:

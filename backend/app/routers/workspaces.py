@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
+from app.logging import logger
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
 from app.schemas.workspace import (
@@ -24,11 +25,11 @@ async def create_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"User {current_user.id} creating workspace '{request.name}'")
     workspace = Workspace(name=request.name, owner_id=current_user.id)
     db.add(workspace)
     await db.flush()
 
-    # Add creator as owner member
     member = WorkspaceMember(
         workspace_id=workspace.id,
         user_id=current_user.id,
@@ -38,6 +39,7 @@ async def create_workspace(
     await db.commit()
     await db.refresh(workspace)
 
+    logger.info(f"Workspace {workspace.id} created by user {current_user.id}")
     return workspace
 
 
@@ -46,6 +48,7 @@ async def list_workspaces(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.debug(f"User {current_user.id} listing workspaces")
     result = await db.execute(
         select(Workspace)
         .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
@@ -63,6 +66,7 @@ async def get_workspace(
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     workspace = result.scalar_one_or_none()
     if workspace is None:
+        logger.warning(f"Workspace {workspace_id} not found")
         raise NotFoundException("Workspace")
     return workspace
 
@@ -74,9 +78,11 @@ async def update_workspace(
     _member: WorkspaceMember = Depends(require_workspace_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Updating workspace {workspace_id}")
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     workspace = result.scalar_one_or_none()
     if workspace is None:
+        logger.warning(f"Workspace {workspace_id} not found")
         raise NotFoundException("Workspace")
 
     if request.name is not None:
@@ -84,6 +90,7 @@ async def update_workspace(
 
     await db.commit()
     await db.refresh(workspace)
+    logger.info(f"Workspace {workspace_id} updated")
     return workspace
 
 
@@ -93,13 +100,16 @@ async def delete_workspace(
     _member: WorkspaceMember = Depends(require_workspace_role("owner")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Deleting workspace {workspace_id}")
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     workspace = result.scalar_one_or_none()
     if workspace is None:
+        logger.warning(f"Workspace {workspace_id} not found")
         raise NotFoundException("Workspace")
 
     await db.delete(workspace)
     await db.commit()
+    logger.info(f"Workspace {workspace_id} deleted")
     return {"success": True}
 
 
@@ -110,13 +120,13 @@ async def add_member(
     _member: WorkspaceMember = Depends(require_workspace_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Check user exists
+    logger.info(f"Adding user {request.user_id} as {request.role} to workspace {workspace_id}")
     result = await db.execute(select(User).where(User.id == request.user_id))
     user = result.scalar_one_or_none()
     if user is None:
+        logger.warning(f"User {request.user_id} not found")
         raise NotFoundException("User")
 
-    # Check not already a member
     result = await db.execute(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id,
@@ -134,7 +144,7 @@ async def add_member(
     )
     db.add(member)
     await db.commit()
-
+    logger.info(f"User {request.user_id} added to workspace {workspace_id}")
     return MemberResponse(
         workspace_id=workspace_id,
         user_id=request.user_id,
@@ -150,6 +160,7 @@ async def list_members(
     _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.debug(f"Listing members for workspace {workspace_id}")
     result = await db.execute(
         select(WorkspaceMember, User)
         .join(User, User.id == WorkspaceMember.user_id)
@@ -175,6 +186,7 @@ async def remove_member(
     _member: WorkspaceMember = Depends(require_workspace_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Removing user {user_id} from workspace {workspace_id}")
     result = await db.execute(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id,
@@ -185,8 +197,10 @@ async def remove_member(
     if member is None:
         raise NotFoundException("Member")
     if member.role == "owner":
+        logger.warning(f"Attempted to remove owner from workspace {workspace_id}")
         raise ForbiddenException("Cannot remove workspace owner")
 
     await db.delete(member)
     await db.commit()
+    logger.info(f"User {user_id} removed from workspace {workspace_id}")
     return {"success": True}

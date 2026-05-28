@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timezone
 from app.database import get_db
+from app.logging import logger
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.models.workflow import Workflow
@@ -24,7 +25,6 @@ async def execute_workflow(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Get workflow
     result = await db.execute(
         select(Workflow).where(
             Workflow.id == workflow_id,
@@ -33,12 +33,12 @@ async def execute_workflow(
     )
     workflow = result.scalar_one_or_none()
     if workflow is None:
+        logger.warning(f"Workflow {workflow_id} not found for execution")
         raise NotFoundException("Workflow")
 
     if not workflow.flow_definition.get("nodes"):
         raise BadRequestException("Workflow has no nodes to execute")
 
-    # Create execution record
     execution = Execution(
         workflow_id=workflow.id,
         workspace_id=workspace_id,
@@ -51,16 +51,21 @@ async def execute_workflow(
     await db.commit()
     await db.refresh(execution)
 
+    logger.info(
+        f"Execution {execution.id} created for workflow {workflow_id} "
+        f"(async={request.async_execution}) by user {current_user.id}"
+    )
+
     if request.async_execution:
-        # Dispatch to Celery worker
         from app.workers.execution_worker import run_workflow_task
         run_workflow_task.delay(execution.id)
+        logger.info(f"Execution {execution.id} dispatched to Celery worker")
     else:
-        # Execute synchronously
         from app.engine.executor import WorkflowExecutor
         executor = WorkflowExecutor(db)
         await executor.execute(execution.id)
         await db.refresh(execution)
+        logger.info(f"Execution {execution.id} completed with status: {execution.status}")
 
     return execution
 
@@ -75,6 +80,7 @@ async def list_executions(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
+    logger.debug(f"Listing executions in workspace {workspace_id}")
     query = select(Execution).where(Execution.workspace_id == workspace_id)
     count_query = select(func.count()).select_from(Execution).where(Execution.workspace_id == workspace_id)
 
@@ -112,6 +118,7 @@ async def get_execution(
     )
     execution = result.scalar_one_or_none()
     if execution is None:
+        logger.warning(f"Execution {execution_id} not found")
         raise NotFoundException("Execution")
     return execution
 
@@ -123,6 +130,7 @@ async def cancel_execution(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(f"Cancelling execution {execution_id}")
     result = await db.execute(
         select(Execution).where(
             Execution.id == execution_id,
@@ -139,4 +147,5 @@ async def cancel_execution(
     execution.status = "cancelled"
     execution.completed_at = datetime.now(timezone.utc)
     await db.commit()
+    logger.info(f"Execution {execution_id} cancelled")
     return {"success": True}

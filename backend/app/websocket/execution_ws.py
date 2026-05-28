@@ -1,5 +1,6 @@
 import json
 from fastapi import WebSocket, WebSocketDisconnect
+from app.logging import logger
 from app.utils.security import decode_token
 
 
@@ -14,12 +15,14 @@ class ConnectionManager:
         if execution_id not in self.active_connections:
             self.active_connections[execution_id] = []
         self.active_connections[execution_id].append(websocket)
+        logger.info(f"WebSocket connected for execution {execution_id} (total: {len(self.active_connections[execution_id])})")
 
     def disconnect(self, websocket: WebSocket, execution_id: str):
         if execution_id in self.active_connections:
             self.active_connections[execution_id].remove(websocket)
             if not self.active_connections[execution_id]:
                 del self.active_connections[execution_id]
+            logger.info(f"WebSocket disconnected for execution {execution_id}")
 
     async def send_event(self, execution_id: str, event: dict):
         if execution_id in self.active_connections:
@@ -36,19 +39,17 @@ manager = ConnectionManager()
 
 async def execution_websocket(websocket: WebSocket, execution_id: str):
     """WebSocket endpoint for real-time execution updates."""
-    # Authenticate via query param
     token = websocket.query_params.get("token")
     if token:
         payload = decode_token(token)
         if payload is None:
+            logger.warning(f"WebSocket auth failed for execution {execution_id}")
             await websocket.close(code=4001)
             return
 
     await manager.connect(websocket, execution_id)
     try:
         while True:
-            # Keep connection alive, wait for client messages
             data = await websocket.receive_text()
-            # Client can send ping/pong or commands
     except WebSocketDisconnect:
         manager.disconnect(websocket, execution_id)

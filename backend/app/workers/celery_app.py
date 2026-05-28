@@ -1,4 +1,5 @@
 from celery import Celery
+from app.logging import logger
 from app.config import get_settings
 
 settings = get_settings()
@@ -19,3 +20,5 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
 )
+
+logger.info(f"Celery app initialized — broker: {settings.REDIS_URL}")
