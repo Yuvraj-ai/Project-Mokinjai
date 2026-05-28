@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useAuth } from '../../hooks/useAuth'
-import { LogOut, ChevronDown, Cpu } from 'lucide-react'
+import { LogOut, ChevronDown, Cpu, Shield } from 'lucide-react'
 
 export default function Navbar() {
   const user = useAuthStore((state) => state.user)
@@ -42,12 +42,20 @@ export default function Navbar() {
           onClick={() => setMenuOpen(!menuOpen)}
           className="flex items-center gap-2.5 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
         >
-          <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-sm font-semibold">
+          <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-sm font-semibold relative">
             {initials}
+            {user?.is_superuser && (
+              <Shield className="w-3 h-3 text-amber-600 absolute -top-1 -right-1 fill-amber-100" />
+            )}
           </div>
           <span className="text-sm text-gray-700 font-medium hidden sm:block max-w-[160px] truncate">
             {user?.email ?? 'User'}
           </span>
+          {user?.is_superuser && (
+            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold hidden sm:block">
+              Admin
+            </span>
+          )}
           <ChevronDown className="w-4 h-4 text-gray-400" />
         </button>
 
@@ -56,6 +64,11 @@ export default function Navbar() {
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-sm font-medium text-gray-900 truncate">{user?.name ?? 'User'}</p>
               <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+              {user?.is_superuser && (
+                <p className="text-xs text-amber-600 font-semibold mt-1 flex items-center gap-1">
+                  <Shield className="w-3 h-3" /> Superuser
+                </p>
+              )}
             </div>
             <button
               onClick={() => {

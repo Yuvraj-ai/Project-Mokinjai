@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import LoginForm from '../components/auth/LoginForm'
+import AdminOTPLogin from '../components/auth/AdminOTPLogin'
 
 export default function LoginPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -11,7 +12,10 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center px-4">
-      <LoginForm />
+      <div className="w-full max-w-md">
+        <LoginForm />
+        <AdminOTPLogin />
+      </div>
     </div>
   )
 }

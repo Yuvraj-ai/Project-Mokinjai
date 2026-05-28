@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { loginApi, getMe } from '../api/auth'
+import { sendAdminOTP, validateAdminOTP } from '../api/otp'
 
 export function useAuth() {
   const { user, isAuthenticated, setUser, login, logout } = useAuthStore()
@@ -25,10 +26,25 @@ export function useAuth() {
     [login]
   )
 
+  const handleAdminOTPLogin = useCallback(
+    async (code: string) => {
+      const sessionToken = await sendAdminOTP()
+        .then((res) => res.session_token)
+      const result = await validateAdminOTP(sessionToken, code)
+      localStorage.setItem('access_token', result.access_token)
+      localStorage.setItem('refresh_token', result.refresh_token)
+      const userData = await getMe()
+      login(userData, result.access_token, result.refresh_token)
+      return userData
+    },
+    [login]
+  )
+
   return {
     user,
     isAuthenticated,
     login: handleLogin,
+    adminOtpLogin: handleAdminOTPLogin,
     logout,
   }
 }
