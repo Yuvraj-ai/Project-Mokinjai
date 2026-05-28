@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+import asyncio
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.logging import logger
 from app.routers import auth, workspaces, workflows, executions, knowledge
 from app.websocket.execution_ws import execution_websocket
+from app.services.otp_store import otp_store
 
 settings = get_settings()
 
@@ -13,7 +15,15 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     logger.info("Application startup — AI Agent Builder API initializing")
     logger.info(f"CORS allowed origin: {settings.FRONTEND_URL}")
+
+    async def cleanup_loop():
+        while True:
+            await asyncio.sleep(60)
+            otp_store.cleanup_expired()
+
+    cleanup_task = asyncio.create_task(cleanup_loop())
     yield
+    cleanup_task.cancel()
     logger.info("Application shutdown")
 
 

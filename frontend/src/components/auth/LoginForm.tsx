@@ -1,5 +1,4 @@
 import { useState, FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react'
 
@@ -88,10 +87,7 @@ export default function LoginForm() {
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">
-            Create one
-          </Link>
+          Don't have an account? Contact an admin to create one.
         </p>
       </div>
     </div>
