@@ -16,6 +16,12 @@ def require_workspace_role(min_role: str = "viewer"):
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ) -> WorkspaceMember:
+        # Superusers bypass all workspace RBAC checks
+        if current_user.is_superuser:
+            logger.debug(f"Superuser {current_user.id} bypassing RBAC for workspace {workspace_id}")
+            # Return a dummy member object for compatibility
+            return WorkspaceMember.__new__(WorkspaceMember)
+
         result = await db.execute(
             select(WorkspaceMember).where(
                 WorkspaceMember.workspace_id == workspace_id,
