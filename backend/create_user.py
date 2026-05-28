@@ -16,22 +16,23 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.database import engine, async_session, Base
-from app.models.user import User
-from app.utils.security import hash_password
-
 
 def create_user(name: str, email: str, password: str, admin: bool = False):
     """Create a user in the database."""
     from sqlalchemy import inspect
 
-    # Create tables if they don't exist yet
-    inspector = inspect(engine)
+    from app.database import engine, async_session, Base
+    from app.models.user import User
+    from app.utils.security import hash_password
+
+    inspector = inspect(engine.sync_engine)
     if "users" not in inspector.get_table_names():
         import asyncio
+
         async def create_tables():
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+
         asyncio.get_event_loop().run_until_complete(create_tables())
 
     import asyncio
@@ -39,6 +40,7 @@ def create_user(name: str, email: str, password: str, admin: bool = False):
     async def _do_create():
         async with async_session() as db:
             from sqlalchemy import select
+
             result = await db.execute(select(User).where(User.email == email))
             existing = result.scalar_one_or_none()
             if existing:
