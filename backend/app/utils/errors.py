@@ -38,6 +38,11 @@ class BadRequestException(AppException):
         )
 
 
+class OTPException(AppException):
+    """Raised for OTP-related errors (invalid, expired, rate limited)."""
+    pass
+
+
 class ConflictException(AppException):
     def __init__(self, detail: str = "Conflict"):
         super().__init__(
