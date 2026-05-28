@@ -1,10 +1,12 @@
 import { useState, FormEvent } from 'react'
 import { useAuth } from '../../hooks/useAuth'
+import { sendAdminOTP } from '../../api/otp'
 import { Shield, KeyRound, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 
 export default function AdminOTPLogin() {
   const { adminOtpLogin } = useAuth()
   const [showOTP, setShowOTP] = useState(false)
+  const [sessionToken, setSessionToken] = useState('')
   const [otp, setOtp] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -14,6 +16,8 @@ export default function AdminOTPLogin() {
     setError(null)
     setLoading(true)
     try {
+      const res = await sendAdminOTP()
+      setSessionToken(res.session_token)
       setShowOTP(true)
       setSent(true)
     } catch {
@@ -28,7 +32,7 @@ export default function AdminOTPLogin() {
     setError(null)
     setLoading(true)
     try {
-      await adminOtpLogin(otp)
+      await adminOtpLogin(sessionToken, otp)
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Invalid OTP. Please try again.')
     } finally {

@@ -9,9 +9,12 @@ from app.schemas.otp import OTPSendResponse, OTPValidateRequest, OTPValidateResp
 from app.schemas.user import UserResponse
 from app.utils.security import verify_password, create_access_token, create_refresh_token, decode_token
 from app.utils.errors import UnauthorizedException, OTPException
+from app.config import get_settings
 from app.middleware.auth import get_current_user
 from app.services.otp_store import otp_store
 from app.services.telegram import send_telegram_message
+
+settings = get_settings()
 
 router = APIRouter()
 
@@ -91,7 +94,7 @@ async def admin_send_otp(db: AsyncSession = Depends(get_db)):
     logger.info("Admin OTP sent to Telegram")
     return OTPSendResponse(
         session_token=session_token,
-        expires_in=300,
+        expires_in=settings.OTP_EXPIRY_SECONDS,
         message="OTP sent to admin Telegram",
     )
 
