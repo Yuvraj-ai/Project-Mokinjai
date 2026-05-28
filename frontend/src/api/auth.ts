@@ -12,11 +12,6 @@ export async function loginApi(email: string, password: string): Promise<TokenRe
   return response.data
 }
 
-export async function registerApi(email: string, password: string, name?: string): Promise<TokenResponse> {
-  const response = await apiClient.post<TokenResponse>('/api/auth/register', { email, password, name })
-  return response.data
-}
-
 export async function getMe(): Promise<User> {
   const response = await apiClient.get<User>('/api/auth/me')
   return response.data
