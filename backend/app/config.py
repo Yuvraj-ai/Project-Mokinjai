@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
 
+    # Telegram OTP
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_ADMIN_CHAT_ID: str = ""
+    OTP_EXPIRY_SECONDS: int = 300
+
     # App
     BACKEND_HOST: str = "0.0.0.0"
     BACKEND_PORT: int = 8000
