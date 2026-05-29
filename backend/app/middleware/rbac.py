@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.logging import logger
+from app.middleware.auth import get_current_user
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.utils.errors import ForbiddenException, NotFoundException
