@@ -9,6 +9,7 @@ The --admin flag marks the user as a superuser with full access.
 """
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -19,28 +20,18 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 def create_user(name: str, email: str, password: str, admin: bool = False):
     """Create a user in the database."""
-    from sqlalchemy import inspect
+    from sqlalchemy import select
 
     from app.database import engine, async_session, Base
     from app.models.user import User
     from app.utils.security import hash_password
 
-    inspector = inspect(engine.sync_engine)
-    if "users" not in inspector.get_table_names():
-        import asyncio
-
-        async def create_tables():
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-
-        asyncio.get_event_loop().run_until_complete(create_tables())
-
-    import asyncio
-
     async def _do_create():
-        async with async_session() as db:
-            from sqlalchemy import select
+        async with engine.begin() as conn:
+            # Create tables if they don't exist yet
+            await conn.run_sync(Base.metadata.create_all)
 
+        async with async_session() as db:
             result = await db.execute(select(User).where(User.email == email))
             existing = result.scalar_one_or_none()
             if existing:
