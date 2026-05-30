@@ -3,6 +3,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkflowEditorPage from './pages/WorkflowEditorPage'
 import ExecutionHistoryPage from './pages/ExecutionHistoryPage'
+import PromptsPage from './pages/PromptsPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/workflows" element={<DashboardPage />} />
         <Route path="/workflows/:workflowId/edit" element={<WorkflowEditorPage />} />
         <Route path="/executions" element={<ExecutionHistoryPage />} />
+        <Route path="/prompts" element={<PromptsPage />} />
       </Route>
     </Routes>
   )

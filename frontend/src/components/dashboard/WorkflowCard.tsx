@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteWorkflow } from '../../api/workflows'
-import { Trash2, Clock, MoreVertical } from 'lucide-react'
+import { deleteWorkflow, updateWorkflow } from '../../api/workflows'
+import { Trash2, Clock, MoreVertical, Pencil, Check, X } from 'lucide-react'
 
 interface Workflow {
   id: string
@@ -16,6 +16,7 @@ interface WorkflowCardProps {
   workflow: Workflow
   workspaceId: string
   onDeleted?: (id: string) => void
+  onRenamed?: (id: string, name: string) => void
 }
 
 function formatDate(dateStr?: string): string {
@@ -32,21 +33,23 @@ function statusColor(status?: string): string {
   switch (status?.toLowerCase()) {
     case 'active':
     case 'published':
-      return 'bg-green-100 text-green-700'
+      return 'bg-status-success/10 text-status-success'
     case 'running':
-      return 'bg-blue-100 text-blue-700'
+      return 'bg-status-info/10 text-status-info'
     case 'error':
     case 'failed':
-      return 'bg-red-100 text-red-700'
+      return 'bg-status-error/10 text-status-error'
     default:
-      return 'bg-gray-100 text-gray-600'
+      return 'bg-cream-200 text-ink-400'
   }
 }
 
-export default function WorkflowCard({ workflow, workspaceId, onDeleted }: WorkflowCardProps) {
+export default function WorkflowCard({ workflow, workspaceId, onDeleted, onRenamed }: WorkflowCardProps) {
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [nameValue, setNameValue] = useState(workflow.name)
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -65,6 +68,23 @@ export default function WorkflowCard({ workflow, workspaceId, onDeleted }: Workf
     }
   }
 
+  const handleRename = async () => {
+    const trimmed = nameValue.trim()
+    if (!trimmed || trimmed === workflow.name) {
+      setEditing(false)
+      setNameValue(workflow.name)
+      return
+    }
+    try {
+      await updateWorkflow(workspaceId, workflow.id, { name: trimmed })
+      onRenamed?.(workflow.id, trimmed)
+    } catch (err) {
+      console.error('Failed to rename workflow:', err)
+      setNameValue(workflow.name)
+    }
+    setEditing(false)
+  }
+
   const handleClick = () => {
     navigate(`/workflows/${workflow.id}/edit`)
   }
@@ -72,27 +92,63 @@ export default function WorkflowCard({ workflow, workspaceId, onDeleted }: Workf
   return (
     <div
       onClick={handleClick}
-      className={`relative bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group ${
+      className={`relative bg-white dark:bg-ink-800 rounded-xl border border-ink-100/80 dark:border-ink-700/60 p-5 shadow-sm hover:border-accent-warm/40 hover:shadow-md transition-all duration-200 cursor-pointer group animate-fade-in-up ${
         deleting ? 'opacity-50 pointer-events-none' : ''
       }`}
     >
       <div className="flex items-start justify-between mb-3">
-        <h3 className="text-base font-semibold text-gray-900 truncate pr-2">{workflow.name}</h3>
+        {editing ? (
+          <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRename();
+                if (e.key === 'Escape') { setEditing(false); setNameValue(workflow.name); }
+              }}
+              onBlur={handleRename}
+              autoFocus
+              className="flex-1 text-base font-body font-semibold text-ink-900 bg-ink-50 border border-ink-200 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-accent-warm/40"
+            />
+            <button onClick={handleRename} className="p-0.5 text-status-success hover:bg-status-success/10 rounded">
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => { setEditing(false); setNameValue(workflow.name); }} className="p-0.5 text-ink-300 hover:bg-ink-50 rounded">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <h3 className="text-base font-body font-semibold text-ink-900 dark:text-cream-100 truncate pr-2 leading-snug">
+            {workflow.name}
+          </h3>
+        )}
         <div className="relative shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation()
               setShowMenu(!showMenu)
             }}
-            className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="p-1 rounded-md text-ink-300 hover:text-ink-600 hover:bg-cream-100 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
           {showMenu && (
-            <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+            <div className="absolute right-0 top-8 w-36 bg-white dark:bg-ink-800 rounded-lg shadow-lg border border-ink-100/60 dark:border-ink-700/60 py-1 z-10 animate-scale-in">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowMenu(false)
+                  setEditing(true)
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink-600 dark:text-ink-300 hover:bg-cream-100 dark:hover:bg-ink-700 transition-colors duration-150"
+              >
+                <Pencil className="w-4 h-4" />
+                Rename
+              </button>
               <button
                 onClick={handleDelete}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-status-error hover:bg-cream-100 transition-colors duration-150"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete
@@ -104,7 +160,7 @@ export default function WorkflowCard({ workflow, workspaceId, onDeleted }: Workf
 
       {workflow.status && (
         <span
-          className={`inline-block text-xs font-medium px-2.5 py-0.5 rounded-full mb-3 ${statusColor(
+          className={`inline-block text-xs font-medium px-2.5 py-0.5 rounded-full mb-4 font-body ${statusColor(
             workflow.status
           )}`}
         >
@@ -113,10 +169,12 @@ export default function WorkflowCard({ workflow, workspaceId, onDeleted }: Workf
       )}
 
       {workflow.description && (
-        <p className="text-sm text-gray-500 line-clamp-2 mb-4">{workflow.description}</p>
+        <p className="text-sm text-ink-400 dark:text-ink-300 line-clamp-2 mb-5 font-body leading-relaxed">
+          {workflow.description}
+        </p>
       )}
 
-      <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-auto">
+      <div className="flex items-center gap-1.5 text-xs text-ink-300 dark:text-ink-400 mt-auto font-body">
         <Clock className="w-3.5 h-3.5" />
         <span>Modified {formatDate(workflow.updated_at || workflow.created_at)}</span>
       </div>

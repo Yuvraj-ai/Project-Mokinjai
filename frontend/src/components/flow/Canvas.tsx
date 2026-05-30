@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useMemo, DragEvent } from 'react';
+import React, { useCallback, useRef, useMemo, useEffect, DragEvent } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -48,6 +48,21 @@ const Canvas: React.FC = () => {
   const onConnect = useWorkflowStore((s) => s.onConnect);
   const addNode = useWorkflowStore((s) => s.addNode);
   const setSelectedNodeId = useWorkflowStore((s) => s.setSelectedNodeId);
+  const removeNode = useWorkflowStore((s) => s.removeNode);
+  const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId) {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        e.preventDefault();
+        removeNode(selectedNodeId);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeId, removeNode]);
 
   const nodeTypes: NodeTypes = useMemo(
     () => ({
@@ -129,28 +144,35 @@ const Canvas: React.FC = () => {
         snapToGrid
         snapGrid={[16, 16]}
         deleteKeyCode={['Backspace', 'Delete']}
-        className="bg-gray-50"
+        className="bg-cream-50 dark:bg-ink-900"
       >
-        <Controls position="bottom-left" className="!shadow-md !border !border-gray-200 !rounded-lg" />
+        <Controls
+          position="bottom-left"
+          showInteractive={false}
+          className="!shadow-sm !border !border-ink-200/40 !rounded-lg !bg-white/90 dark:!bg-ink-800/90 !backdrop-blur-sm [&>button]:!bg-transparent [&>button]:!border-b [&>button]:!border-ink-200/30 dark:[&>button]:!border-ink-700/50 [&>button]:!text-ink-500 dark:[&>button]:!text-ink-300 [&>button:hover]:!bg-ink-100/50 dark:[&>button:hover]:!bg-ink-700/50 [&>button]:!w-8 [&>button]:!h-8 [&>button]:!flex [&>button]:!items-center [&>button]:!justify-center [&>button:last-child]:!border-b-0"
+        />
         <MiniMap
           position="bottom-right"
-          className="!shadow-md !border !border-gray-200 !rounded-lg"
-          maskColor="rgba(0, 0, 0, 0.1)"
+          className="!shadow-sm !border !border-ink-200/40 !rounded-lg !bg-white/90 dark:!bg-ink-800/90 !backdrop-blur-sm"
+          maskColor="rgba(15, 15, 20, 0.15)"
           nodeColor={(node) => {
             const colorMap: Record<string, string> = {
-              input: '#22c55e',
-              agent: '#8b5cf6',
-              prompt: '#3b82f6',
-              output: '#ef4444',
-              conditional: '#f59e0b',
-              transform: '#06b6d4',
-              http_request: '#ec4899',
-              knowledge: '#14b8a6',
+              input: '#2D6A4F',
+              agent: '#7B2D8B',
+              prompt: '#264653',
+              output: '#9B2226',
+              conditional: '#BC6C25',
+              transform: '#0E7C86',
+              http_request: '#8B2252',
+              knowledge: '#1A756F',
             };
-            return colorMap[node.type || ''] || '#94a3b8';
+            return colorMap[node.type || ''] || '#B8A99A';
           }}
+          nodeStrokeWidth={2}
+          pannable
+          zoomable
         />
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#d1d5db" />
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#EDE9E0" className="dark:opacity-30" />
       </ReactFlow>
     </div>
   );

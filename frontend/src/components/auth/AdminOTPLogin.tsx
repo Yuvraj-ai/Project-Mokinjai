@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { sendAdminOTP } from '../../api/otp'
-import { Shield, KeyRound, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
+import { Shield, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function AdminOTPLogin() {
   const { adminOtpLogin } = useAuth()
@@ -42,13 +42,13 @@ export default function AdminOTPLogin() {
 
   if (!showOTP) {
     return (
-      <div className="mt-6 pt-6 border-t border-gray-200">
+      <div className="mt-8 pt-8 border-t border-ink-200/50 dark:border-ink-700/50 animate-fade-in-up stagger-6">
         <button
           onClick={handleRequestOTP}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 text-gray-700 font-medium py-2.5 px-4 rounded-lg text-sm transition-colors"
+          className="group w-full flex items-center justify-center gap-2.5 border border-ink-200 dark:border-ink-600 hover:border-ink-400 dark:hover:border-ink-500 disabled:border-ink-100 text-ink-600 dark:text-ink-300 hover:text-ink-900 dark:hover:text-cream-100 font-medium py-3 px-4 text-sm tracking-wide transition-all duration-300"
         >
-          <Shield className="w-4 h-4" />
+          <Shield className="w-4 h-4 text-accent-warm" />
           Admin Login via OTP
         </button>
       </div>
@@ -56,55 +56,72 @@ export default function AdminOTPLogin() {
   }
 
   return (
-    <div className="mt-6 pt-6 border-t border-gray-200">
-      <div className="flex items-center gap-2 mb-4 text-sm text-gray-600">
-        <KeyRound className="w-4 h-4" />
-        <span className="font-medium">Enter 6-digit OTP from Telegram</span>
+    <div className="mt-8 pt-8 border-t border-ink-200/50 dark:border-ink-700/50 animate-fade-in">
+      <div className="flex items-center gap-2.5 mb-6">
+        <KeyRound className="w-4 h-4 text-accent-warm" />
+        <span className="text-xs font-medium text-ink-500 dark:text-ink-300 tracking-widest uppercase">
+          Telegram OTP
+        </span>
       </div>
 
       {sent && (
-        <div className="mb-4 flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-2.5 text-sm">
+        <div className="mb-6 flex items-center gap-2.5 bg-status-success/5 border border-status-success/20 text-status-success rounded-sm px-4 py-3 text-sm animate-fade-in">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>OTP sent to admin Telegram</span>
         </div>
       )}
 
       {error && (
-        <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2.5 text-sm">
+        <div className="mb-6 flex items-start gap-2.5 bg-status-error/5 border border-status-error/20 text-status-error rounded-sm px-4 py-3 text-sm animate-fade-in">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="animate-fade-in-up">
           <input
             type="text"
             value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={(e) =>
+              setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))
+            }
             required
             maxLength={6}
             placeholder="000000"
-            className="w-full text-center text-2xl tracking-[1em] font-mono py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+            className="w-full text-center text-2xl font-mono tracking-[0.5em] py-4 bg-transparent border-b border-ink-200 dark:border-ink-600 text-ink-900 dark:text-cream-100 placeholder:text-ink-400 dark:placeholder:text-ink-500 focus:outline-none focus:border-accent-warm transition-colors duration-300"
             autoComplete="off"
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || otp.length !== 6}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center justify-center gap-2"
-        >
-          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {loading ? 'Verifying...' : 'Verify & Login'}
-        </button>
+        <div className="animate-fade-in-up stagger-1">
+          <button
+            type="submit"
+            disabled={loading || otp.length !== 6}
+            className="group w-full flex items-center justify-center gap-3 bg-ink-900 dark:bg-cream-200 hover:bg-ink-800 dark:hover:bg-cream-300 disabled:bg-ink-400 text-cream-50 dark:text-ink-800 font-medium py-3.5 px-6 text-sm tracking-wide transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-accent-warm focus:ring-offset-2 focus:ring-offset-cream-50 dark:focus:ring-offset-ink-900"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-cream-50/30 border-t-cream-50 rounded-full animate-spin" />
+                Verifying
+              </span>
+            ) : (
+              'Verify & Login'
+            )}
+          </button>
+        </div>
 
         <button
           type="button"
-          onClick={() => { setShowOTP(false); setOtp(''); setError(null); setSent(false) }}
-          className="w-full text-gray-500 hover:text-gray-700 text-sm py-1.5 transition-colors"
+          onClick={() => {
+            setShowOTP(false)
+            setOtp('')
+            setError(null)
+            setSent(false)
+          }}
+          className="w-full text-ink-400 dark:text-ink-400 hover:text-ink-700 dark:hover:text-cream-200 text-xs tracking-widest uppercase py-2 transition-colors duration-300"
         >
-          Back
+          Back to email
         </button>
       </form>
     </div>

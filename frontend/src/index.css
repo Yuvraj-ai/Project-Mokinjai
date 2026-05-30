@@ -23,6 +23,26 @@
   --radius: 0.625rem;
 }
 
+.dark {
+  --background: #0C0E13;
+  --foreground: #F0F1F3;
+  --card: #14171E;
+  --card-foreground: #F0F1F3;
+  --primary: #F0F1F3;
+  --primary-foreground: #0C0E13;
+  --secondary: #1E222B;
+  --secondary-foreground: #D4D7DC;
+  --muted: #1E222B;
+  --muted-foreground: #7C828E;
+  --accent: #C4956A;
+  --accent-foreground: #0C0E13;
+  --destructive: #DC2626;
+  --destructive-foreground: #FDFCFA;
+  --border: #2A2F3A;
+  --input: #2A2F3A;
+  --ring: #C4956A;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -70,6 +90,14 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #A8ADB6;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #3D4451;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #5A6170;
 }
 
 @keyframes fadeIn {

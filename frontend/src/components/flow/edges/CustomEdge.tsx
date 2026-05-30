@@ -39,7 +39,6 @@ const CustomEdge: React.FC<EdgeProps> = ({
 
   return (
     <>
-      {/* Invisible wider path for easier hover target */}
       <path
         d={edgePath}
         fill="none"
@@ -54,10 +53,10 @@ const CustomEdge: React.FC<EdgeProps> = ({
         style={{
           ...style,
           strokeWidth: 2,
-          stroke: hovered ? '#3b82f6' : '#94a3b8',
+          stroke: hovered ? '#C4956A' : '#A8ADB6',
           strokeDasharray: hovered ? undefined : '5 5',
           animation: 'none',
-          transition: 'stroke 0.2s ease',
+          transition: 'stroke 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       />
       <EdgeLabelRenderer>
@@ -73,7 +72,8 @@ const CustomEdge: React.FC<EdgeProps> = ({
         >
           {hovered && (
             <button
-              className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white hover:bg-red-600 shadow-md transition-all duration-150"
+              className="flex items-center justify-center w-5 h-5 rounded-full text-cream-50 shadow-md transition-all"
+              style={{ backgroundColor: '#DC2626' }}
               onClick={handleDelete}
               title="Delete edge"
             >

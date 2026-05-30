@@ -1,6 +1,7 @@
 import type { Node } from '@xyflow/react'
 
 export interface AgentNodeData {
+  [key: string]: unknown
   label: string
   model: string
   system_prompt: string
@@ -9,22 +10,26 @@ export interface AgentNodeData {
 }
 
 export interface PromptNodeData {
+  [key: string]: unknown
   label: string
   template: string
   variables: string[]
 }
 
 export interface OutputNodeData {
+  [key: string]: unknown
   label: string
   format: 'text' | 'json'
 }
 
 export interface InputNodeData {
+  [key: string]: unknown
   label: string
   input_schema: Record<string, unknown>
 }
 
 export interface ConditionalNodeData {
+  [key: string]: unknown
   label: string
   condition: string
   operator: 'equals' | 'contains' | 'greater_than' | 'less_than' | 'regex'
@@ -32,12 +37,14 @@ export interface ConditionalNodeData {
 }
 
 export interface TransformNodeData {
+  [key: string]: unknown
   label: string
   transform_type: 'jq' | 'template' | 'script'
   expression: string
 }
 
 export interface HttpNodeData {
+  [key: string]: unknown
   label: string
   url: string
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
@@ -46,6 +53,7 @@ export interface HttpNodeData {
 }
 
 export interface KnowledgeNodeData {
+  [key: string]: unknown
   label: string
   knowledge_base_id: string
   top_k: number

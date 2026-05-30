@@ -58,15 +58,18 @@ export default function WorkflowEditorPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="flex items-center justify-center h-full bg-cream-50">
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-cream-200 border-t-accent" />
+          <p className="font-body text-xs text-ink-300 tracking-wide">Loading workflow...</p>
+        </div>
       </div>
     )
   }
 
   return (
     <ReactFlowProvider>
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full bg-cream-50 dark:bg-ink-900">
         {workspaceId && workflowId && (
           <CanvasToolbar workspaceId={workspaceId} workflowId={workflowId} />
         )}

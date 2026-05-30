@@ -51,22 +51,26 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <Loader2 className="w-6 h-6 text-accent animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-5xl mx-auto px-8 py-10">
+      <div className="flex items-end justify-between mb-10 animate-fade-in-up stagger-1">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Workflows</h1>
-          <p className="text-gray-500 mt-1 text-sm">Build and manage your AI agent workflows</p>
+          <h1 className="text-3xl font-display text-ink-900 dark:text-cream-100 tracking-tight leading-none">
+            Workflows
+          </h1>
+          <p className="text-ink-400 dark:text-ink-300 mt-2 text-sm font-body">
+            Build and manage your AI agent workflows
+          </p>
         </div>
         <button
           onClick={handleCreateWorkflow}
           disabled={creating}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-2.5 px-5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="inline-flex items-center gap-2 bg-ink-800 dark:bg-cream-200 hover:bg-ink-900 dark:hover:bg-cream-300 disabled:bg-ink-400 text-cream-50 dark:text-ink-800 font-body font-medium py-2 px-5 rounded-lg text-sm transition-all duration-200 hover:shadow-md"
         >
           {creating ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -78,7 +82,9 @@ export default function DashboardPage() {
       </div>
 
       {workspaceId && (
-        <WorkflowList workspaceId={workspaceId} key={refreshKey} />
+        <div className="animate-fade-in-up stagger-2">
+          <WorkflowList workspaceId={workspaceId} key={refreshKey} />
+        </div>
       )}
     </div>
   )

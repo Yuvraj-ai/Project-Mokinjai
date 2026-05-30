@@ -2,9 +2,9 @@ import React from 'react';
 import { NodeProps } from '@xyflow/react';
 import BaseNode from './BaseNode';
 
-const TRANSFORM_COLOR = '#06b6d4';
+const TRANSFORM_COLOR = '#0E7C86';
 
-const TransformNode: React.FC<NodeProps> = ({ data, selected }) => {
+const TransformNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const transformation = (data.transformation as string) || 'passthrough';
 
   const transformLabels: Record<string, string> = {
@@ -20,10 +20,13 @@ const TransformNode: React.FC<NodeProps> = ({ data, selected }) => {
   };
 
   return (
-    <BaseNode label={data.label as string || 'Transform'} color={TRANSFORM_COLOR} selected={selected}>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-medium text-gray-500 uppercase">Type</span>
-        <span className="text-xs font-semibold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded">
+    <BaseNode id={id} label={data.label as string || 'Transform'} color={TRANSFORM_COLOR} selected={selected}>
+      <div className="flex items-center gap-1.5">
+        <span className="font-body text-[9px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider">Type</span>
+        <span
+          className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded"
+          style={{ backgroundColor: `${TRANSFORM_COLOR}15`, color: TRANSFORM_COLOR }}
+        >
           {transformLabels[transformation] || transformation}
         </span>
       </div>

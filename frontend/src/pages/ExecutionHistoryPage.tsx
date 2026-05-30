@@ -6,19 +6,19 @@ import { CheckCircle, XCircle, Clock, Loader2, History } from 'lucide-react'
 import type { Execution } from '../types/execution'
 
 const statusIcons: Record<string, React.ReactNode> = {
-  pending: <Clock className="w-4 h-4 text-yellow-500" />,
-  running: <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />,
-  completed: <CheckCircle className="w-4 h-4 text-green-500" />,
-  failed: <XCircle className="w-4 h-4 text-red-500" />,
-  cancelled: <XCircle className="w-4 h-4 text-gray-400" />,
+  pending: <Clock className="w-3.5 h-3.5 text-status-warning" />,
+  running: <Loader2 className="w-3.5 h-3.5 text-status-info animate-spin" />,
+  completed: <CheckCircle className="w-3.5 h-3.5 text-status-success" />,
+  failed: <XCircle className="w-3.5 h-3.5 text-status-error" />,
+  cancelled: <XCircle className="w-3.5 h-3.5 text-ink-300" />,
 }
 
 const statusColors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  running: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
+  pending: 'bg-status-warning/10 text-status-warning',
+  running: 'bg-status-info/10 text-status-info',
+  completed: 'bg-status-success/10 text-status-success',
+  failed: 'bg-status-error/10 text-status-error',
+  cancelled: 'bg-ink-100 text-ink-400',
 }
 
 export default function ExecutionHistoryPage() {
@@ -49,63 +49,63 @@ export default function ExecutionHistoryPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+        <Loader2 className="w-6 h-6 animate-spin text-accent" />
       </div>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <History className="w-6 h-6 text-gray-600" />
-        <h1 className="text-2xl font-bold text-gray-900">Execution History</h1>
+    <div className="p-8">
+      <div className="flex items-center gap-3 mb-8 animate-fade-in">
+        <History className="w-6 h-6 text-ink-300" />
+        <h1 className="font-display text-3xl font-normal text-ink-800 dark:text-cream-100">Execution History</h1>
       </div>
 
       {executions.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <History className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-          <p>No executions yet</p>
-          <p className="text-sm mt-1">Run a workflow to see execution history here</p>
+        <div className="text-center py-16 animate-fade-in">
+          <History className="w-12 h-12 mx-auto mb-4 text-ink-200" />
+          <p className="font-display text-xl text-ink-400 mb-1">No executions yet</p>
+          <p className="font-body text-sm text-ink-300">Run a workflow to see execution history here</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-cream-50 rounded-xl border border-cream-200 shadow-sm overflow-hidden animate-fade-in-up">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Execution ID</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Trigger</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Duration</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tokens</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created</th>
+              <tr className="bg-cream-100 border-b border-cream-200">
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Status</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Execution ID</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Trigger</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Duration</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Tokens</th>
+                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {executions.map((exec) => (
+            <tbody className="divide-y divide-cream-200">
+              {executions.map((exec, i) => (
                 <tr
                   key={exec.id}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  className={`group cursor-pointer hover:bg-cream-100 transition-all duration-300 animate-fade-in stagger-${Math.min(i + 1, 8)}`}
                   onClick={() => setExecution(exec)}
                 >
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[exec.status] || ''}`}>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${statusColors[exec.status] || ''}`}>
                       {statusIcons[exec.status]}
                       {exec.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 font-mono">
+                  <td className="px-4 py-3 font-mono text-[11px] text-ink-400">
                     {exec.id.slice(0, 8)}...
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+                  <td className="px-4 py-3 font-body text-[11px] text-ink-500 capitalize">
                     {exec.trigger_type || '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                  <td className="px-4 py-3 font-mono text-[11px] text-ink-400">
                     {exec.execution_time_ms != null ? `${exec.execution_time_ms}ms` : '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                  <td className="px-4 py-3 font-mono text-[11px] text-ink-400">
                     {exec.token_usage?.total_tokens || '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
+                  <td className="px-4 py-3 font-body text-[11px] text-ink-300">
                     {new Date(exec.created_at).toLocaleString()}
                   </td>
                 </tr>

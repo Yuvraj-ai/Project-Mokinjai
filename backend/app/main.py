@@ -4,7 +4,7 @@ from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.logging import logger
-from app.routers import auth, workspaces, workflows, executions, knowledge
+from app.routers import auth, workspaces, workflows, executions, knowledge, prompts
 from app.websocket.execution_ws import execution_websocket
 from app.services.otp_store import otp_store
 
@@ -54,6 +54,7 @@ app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspace
 app.include_router(workflows.router, prefix="/api/workspaces/{workspace_id}/workflows", tags=["workflows"])
 app.include_router(executions.router, prefix="/api/workspaces/{workspace_id}", tags=["executions"])
 app.include_router(knowledge.router, prefix="/api/workspaces/{workspace_id}/knowledge-bases", tags=["knowledge"])
+app.include_router(prompts.router, prefix="/api/workspaces/{workspace_id}/prompts", tags=["prompts"])
 
 
 @app.get("/health")

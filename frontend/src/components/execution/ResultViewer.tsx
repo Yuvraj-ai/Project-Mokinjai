@@ -22,32 +22,32 @@ export default function ResultViewer({ data }: ResultViewerProps) {
   }
 
   return (
-    <div className="p-4 border-t border-gray-100">
-      <div className="flex items-center justify-between mb-2">
+    <div className="p-4 border-t border-cream-200">
+      <div className="flex items-center justify-between mb-3">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 text-sm font-medium text-gray-700"
+          className="flex items-center gap-1 font-body text-[11px] font-semibold uppercase tracking-widest text-ink-500 hover:text-ink-700 transition-colors duration-300"
         >
-          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           Output
         </button>
         <button
           onClick={handleCopy}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 text-ink-200 hover:text-ink-500 hover:bg-cream-200 rounded-md transition-all duration-300"
           title="Copy output"
         >
           {copied ? (
-            <Check className="w-3.5 h-3.5 text-green-500" />
+            <Check className="w-3.5 h-3.5 text-accent-warm" />
           ) : (
-            <Copy className="w-3.5 h-3.5 text-gray-400" />
+            <Copy className="w-3.5 h-3.5" />
           )}
         </button>
       </div>
-      {expanded && (
-        <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-64 whitespace-pre-wrap break-words">
+      <div className={`overflow-hidden transition-all duration-500 ${expanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <pre className="font-mono text-[11px] text-ink-500 bg-cream-100 border border-cream-200 p-3 rounded-lg overflow-auto max-h-64 whitespace-pre-wrap break-words">
           {outputText}
         </pre>
-      )}
+      </div>
     </div>
   )
 }
