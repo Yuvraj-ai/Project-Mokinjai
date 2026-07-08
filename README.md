@@ -290,3 +290,7 @@ Browser (React 19 + React Flow)
 ## License
 
 This project is for personal/educational use.
+
+---
+
+Based on Project TKAE (To Kill An Eagle).
