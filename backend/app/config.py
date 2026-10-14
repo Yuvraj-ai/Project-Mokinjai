@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
 
+
+    # Fernet key for LLM and MCP secrets at rest. Generate with Fernet.generate_key().
+    LLM_ENCRYPTION_KEY: str = ""
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_ADMIN_CHAT_ID: str = ""

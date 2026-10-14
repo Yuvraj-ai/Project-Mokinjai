@@ -5,6 +5,8 @@ from app.models.execution import Execution
 from app.models.knowledge import KnowledgeBase, Document
 from app.models.api_key import ApiKey, AuditLog
 from app.models.prompt import PromptTemplate
+from app.models.llm_profile import LlmProfile
+from app.models.structured_output import StructuredOutput
 
 __all__ = [
     "User",
@@ -18,4 +20,6 @@ __all__ = [
     "ApiKey",
     "AuditLog",
     "PromptTemplate",
+    "LlmProfile",
+    "StructuredOutput",
 ]
