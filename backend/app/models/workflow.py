@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -15,12 +14,12 @@ class Workflow(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    flow_definition: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    flow_definition: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), default="draft", index=True)  # draft, published, archived
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     workspace = relationship("Workspace", back_populates="workflows")
@@ -36,10 +35,10 @@ class WorkflowVersion(Base):
         String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
-    flow_definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    flow_definition: Mapped[dict] = mapped_column(JSON, nullable=False)
     changelog: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     workflow = relationship("Workflow", back_populates="versions")
 
