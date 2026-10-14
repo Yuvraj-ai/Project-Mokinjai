@@ -51,6 +51,10 @@ export default function PromptCard({ prompt, workspaceId, onEdit, onDeleted }: P
       <div className="flex items-center gap-1.5 text-[10px] text-ink-300 dark:text-ink-400 mb-2">
         <Calendar className="w-3 h-3" />
         <span>{formatDate(prompt.created_at)}</span>
+        <span className="text-ink-200 dark:text-ink-600" aria-hidden="true">·</span>
+        <span title="Exact count from tiktoken (o200k_base), measured server-side">
+          {prompt.token_count.toLocaleString()} tokens
+        </span>
       </div>
       {prompt.description && (
         <p className="text-xs text-ink-400 dark:text-ink-300 line-clamp-3 leading-relaxed flex-1">{prompt.description}</p>
