@@ -7,6 +7,10 @@ import sys
 # Add parent directory to path so we can import app modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Load .env file for SYNC_DATABASE_URL
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 from app.database import Base
 from app.models import *  # noqa: F401,F403 - import all models so alembic can detect them
 
