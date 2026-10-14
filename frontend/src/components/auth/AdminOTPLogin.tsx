@@ -43,6 +43,9 @@ export default function AdminOTPLogin() {
   if (!showOTP) {
     return (
       <div className="mt-8 pt-8 border-t border-ink-200/50 dark:border-ink-700/50 animate-fade-in-up stagger-6">
+        {error && (
+          <p className="mb-3 text-sm text-status-error">{error}</p>
+        )}
         <button
           onClick={handleRequestOTP}
           disabled={loading}

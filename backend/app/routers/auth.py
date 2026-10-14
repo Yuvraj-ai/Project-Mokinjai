@@ -74,7 +74,7 @@ async def admin_send_otp(db: AsyncSession = Depends(get_db)):
 
     # Verify admin user exists
     result = await db.execute(select(User).where(User.is_superuser == True))
-    admin_user = result.scalar_one_or_none()
+    admin_user = result.scalars().first()
     if admin_user is None:
         logger.error("Admin OTP requested but no superuser exists in database")
         raise OTPException(status_code=500, detail="Admin user not configured")
@@ -113,7 +113,7 @@ async def admin_validate_otp(
         raise OTPException(status_code=401, detail="Invalid or expired OTP")
 
     result = await db.execute(select(User).where(User.is_superuser == True))
-    admin_user = result.scalar_one_or_none()
+    admin_user = result.scalars().first()
     if admin_user is None:
         raise OTPException(status_code=500, detail="Admin user not configured")
 
