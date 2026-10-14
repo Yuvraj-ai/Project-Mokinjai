@@ -1,5 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from datetime import datetime
+
+from app.utils.tokens import count_tokens
 
 
 class PromptCreate(BaseModel):
@@ -24,6 +26,11 @@ class PromptResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def token_count(self) -> int:
+        return count_tokens(self.content)
 
 
 class PromptListResponse(BaseModel):
