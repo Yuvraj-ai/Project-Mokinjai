@@ -4,6 +4,8 @@ import DashboardPage from './pages/DashboardPage'
 import WorkflowEditorPage from './pages/WorkflowEditorPage'
 import ExecutionHistoryPage from './pages/ExecutionHistoryPage'
 import PromptsPage from './pages/PromptsPage'
+import LlmProfilesPage from './pages/LlmProfilesPage'
+import StructuredOutputsPage from './pages/StructuredOutputsPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -17,6 +19,8 @@ export default function App() {
         <Route path="/workflows/:workflowId/edit" element={<WorkflowEditorPage />} />
         <Route path="/executions" element={<ExecutionHistoryPage />} />
         <Route path="/prompts" element={<PromptsPage />} />
+        <Route path="/structured-outputs" element={<StructuredOutputsPage />} />
+        <Route path="/llms" element={<LlmProfilesPage />} />
       </Route>
     </Routes>
   )
