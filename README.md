@@ -189,7 +189,6 @@ This starts all services: PostgreSQL, Redis, Backend (port 8000), Celery worker,
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder` | Async PostgreSQL connection |
-| `SYNC_DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/agentbuilder` | Sync connection (for Alembic) |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection |
 | `JWT_SECRET_KEY` | `your-super-secret-key-change-in-production` | JWT signing secret (**change this**) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token lifetime |

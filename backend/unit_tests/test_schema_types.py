@@ -5,6 +5,8 @@ point is what actually exists in PostgreSQL after create_all — not what the
 models claim.
 """
 
+from pathlib import Path
+
 from sqlalchemy import text
 
 from app.models.prompt import PromptTemplate
@@ -84,3 +86,31 @@ async def test_no_sqlite_autoincrement_flag_remains():
     for entry in entries:
         if isinstance(entry, dict):
             assert "sqlite_autoincrement" not in entry
+
+
+def test_aiosqlite_is_no_longer_a_dependency():
+    requirements = (
+        Path(__file__).resolve().parents[1] / "requirements.txt"
+    ).read_text()
+    assert "aiosqlite" not in requirements
+
+
+async def test_aiosqlite_is_not_installed():
+    """The driver must be gone from the venv, not merely unlisted."""
+    import importlib.util
+
+    assert importlib.util.find_spec("aiosqlite") is None
+
+
+def test_no_dead_sync_database_url_remains():
+    """The sync URL existed only to give Alembic a blocking driver (Task 2).
+
+    Task 2's own unit test could only catch the field being re-declared on
+    Settings, because extra="ignore" silently swallows the variable everywhere
+    else. This is the repo-wide guard: it fails if the dead name reappears in the
+    deployment config or the docs.
+    """
+    root = Path(__file__).resolve().parents[2]
+    for rel in ("docker-compose.yml", "README.md"):
+        text = (root / rel).read_text()
+        assert "SYNC_DATABASE_URL" not in text, f"{rel} still references SYNC_DATABASE_URL"
