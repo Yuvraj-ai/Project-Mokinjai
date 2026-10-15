@@ -15,16 +15,17 @@ from app.utils.security import decode_token
 security = HTTPBearer()
 
 
-async def _resolve_session_and_user(
-    credentials: HTTPAuthorizationCredentials,
-    db: AsyncSession,
-) -> tuple[Session, User]:
-    """Decode the access token and confirm its session is still alive.
+async def resolve_session_and_user(token: str, db: AsyncSession) -> tuple[Session, User]:
+    """Decode an access token and confirm its session is still alive.
 
-    One query: the session join is added to the user lookup that already happened
-    here, so per-request revocation costs no extra round trip.
+    Takes a raw token rather than an HTTPAuthorizationCredentials so a non-HTTP
+    caller — the execution WebSocket — can perform exactly the same check instead
+    of a weaker one of its own.
+
+    One query: the session join rides along with the user lookup that already
+    happened here, so per-request revocation costs no extra round trip.
     """
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(token)
     if payload is None:
         logger.warning("Authentication failed — invalid or expired token")
         raise UnauthorizedException("Invalid or expired token")
@@ -53,6 +54,16 @@ async def _resolve_session_and_user(
         raise UnauthorizedException("Session has ended; sign in again")
 
     user, session = row
+
+    # Defence in depth, added after Task 4's reviewer showed identity now derives
+    # from the session row and `sub` is otherwise unread. Unreachable today: every
+    # minting path pairs these (_issue_tokens sets sub=user.id and creates the
+    # session with the same id; refresh re-derives the user from session.user_id).
+    # It guards a future minting bug, costs one string comparison, and no query.
+    if payload.get("sub") != session.user_id:
+        logger.warning(f"Token sub={payload.get('sub')} does not own session {session.id}")
+        raise UnauthorizedException("Token does not match its session")
+
     return session, user
 
 
@@ -60,7 +71,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    _, user = await _resolve_session_and_user(credentials, db)
+    _, user = await resolve_session_and_user(credentials.credentials, db)
     logger.debug(f"Authenticated user: {user.id} ({user.email})")
     return user
 
@@ -70,5 +81,5 @@ async def get_current_session(
     db: AsyncSession = Depends(get_db),
 ) -> Session:
     """The session behind the current request — what logout needs to revoke."""
-    session, _ = await _resolve_session_and_user(credentials, db)
+    session, _ = await resolve_session_and_user(credentials.credentials, db)
     return session

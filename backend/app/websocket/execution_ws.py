@@ -1,7 +1,9 @@
 import json
 from fastapi import WebSocket, WebSocketDisconnect
+from app.database import async_session
 from app.logging import logger
-from app.utils.security import decode_token
+from app.middleware.auth import resolve_session_and_user
+from app.utils.errors import UnauthorizedException
 
 
 class ConnectionManager:
@@ -38,11 +40,22 @@ manager = ConnectionManager()
 
 
 async def execution_websocket(websocket: WebSocket, execution_id: str):
-    """WebSocket endpoint for real-time execution updates."""
+    """WebSocket endpoint for real-time execution updates.
+
+    Requires a valid access token with a live session. Previously a missing token
+    skipped verification entirely, and any decodable JWT — including a refresh
+    token — was accepted, so this path bypassed session revocation completely.
+    """
     token = websocket.query_params.get("token")
-    if token:
-        payload = decode_token(token)
-        if payload is None:
+    if not token:
+        logger.warning(f"WebSocket rejected — no token for execution {execution_id}")
+        await websocket.close(code=4001)
+        return
+
+    async with async_session() as db:
+        try:
+            await resolve_session_and_user(token, db)
+        except UnauthorizedException:
             logger.warning(f"WebSocket auth failed for execution {execution_id}")
             await websocket.close(code=4001)
             return

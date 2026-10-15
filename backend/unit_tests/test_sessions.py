@@ -307,3 +307,129 @@ async def test_logout_all_revokes_every_session_for_that_user(client, test_user)
 
     assert (await client.post("/api/auth/refresh", json={"refresh_token": first_token})).status_code == 401
     assert (await client.post("/api/auth/refresh", json={"refresh_token": second_token})).status_code == 401
+
+
+import pytest
+
+from app.utils.errors import UnauthorizedException
+from app.utils.security import create_access_token
+
+
+async def test_resolver_returns_the_session_and_user_for_a_live_token(
+    client, test_user, service_session
+):
+    from app.middleware.auth import resolve_session_and_user
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    token = login.json()["access_token"]
+
+    session, user = await resolve_session_and_user(token, service_session)
+
+    assert user.id == test_user.id
+    assert session.revoked_at is None
+
+
+async def test_resolver_rejects_a_token_with_no_session_id(client, test_user, service_session):
+    from app.middleware.auth import resolve_session_and_user
+
+    stale = create_access_token({"sub": test_user.id, "email": test_user.email})
+
+    with pytest.raises(UnauthorizedException):
+        await resolve_session_and_user(stale, service_session)
+
+
+async def test_resolver_rejects_a_revoked_session(client, test_user, service_session):
+    from app.middleware.auth import resolve_session_and_user
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    token = login.json()["access_token"]
+    session = (await service_session.execute(select(Session))).scalar_one()
+    await revoke_session(service_session, session)
+
+    with pytest.raises(UnauthorizedException):
+        await resolve_session_and_user(token, service_session)
+
+
+async def test_resolver_rejects_a_refresh_token(client, test_user, service_session):
+    """A refresh token must not open an authenticated context, on any transport."""
+    from app.middleware.auth import resolve_session_and_user
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    session = (await service_session.execute(select(Session))).scalar_one()
+    refresh = create_access_token({"sub": test_user.id, "sid": session.id}, token_type="refresh")
+
+    with pytest.raises(UnauthorizedException):
+        await resolve_session_and_user(refresh, service_session)
+
+
+async def test_resolver_rejects_a_token_whose_subject_does_not_own_the_session(
+    client, test_user, admin_user, service_session
+):
+    """The cross-check added in Step 3.
+
+    Identity comes from the session row, so a token whose `sub` disagrees with that
+    session's owner is a bug rather than an attack — no minting path produces one.
+    That is exactly why it needs a test: otherwise it is a guard nobody has seen run,
+    and a future refactor could delete it without any test noticing.
+    """
+    from app.middleware.auth import resolve_session_and_user
+
+    await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    session = (await service_session.execute(select(Session))).scalar_one()
+
+    mismatched = create_access_token({"sub": admin_user.id, "sid": session.id})
+
+    with pytest.raises(UnauthorizedException):
+        await resolve_session_and_user(mismatched, service_session)
+
+
+class _FakeWebSocket:
+    """Enough of the interface for the guard, without a transport."""
+
+    def __init__(self, token: str | None = None):
+        self.query_params = {} if token is None else {"token": token}
+        self.closed_with: int | None = None
+        self.accepted = False
+
+    async def accept(self):
+        self.accepted = True
+
+    async def close(self, code: int = 1000):
+        self.closed_with = code
+
+    async def receive_text(self):
+        from fastapi import WebSocketDisconnect
+
+        raise WebSocketDisconnect()
+
+
+async def test_websocket_rejects_a_connection_with_no_token():
+    from app.websocket.execution_ws import execution_websocket
+
+    socket = _FakeWebSocket(token=None)
+    await execution_websocket(socket, "exec-1")
+
+    assert socket.closed_with == 4001, "a tokenless connection must be refused"
+    assert socket.accepted is False, "it must be refused before being accepted"
+
+
+async def test_websocket_rejects_an_invalid_token():
+    from app.websocket.execution_ws import execution_websocket
+
+    socket = _FakeWebSocket(token="not-a-jwt")
+    await execution_websocket(socket, "exec-1")
+
+    assert socket.closed_with == 4001
+    assert socket.accepted is False
