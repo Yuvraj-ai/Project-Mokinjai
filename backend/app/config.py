@@ -1,5 +1,15 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+# Resolve .env from the repository root, not the process CWD. pydantic-settings
+# resolves a relative env_file against the CWD, so the same `cd backend` that
+# every documented command uses silently skipped the real .env and fell back to
+# the defaults below. Alembic (backend/alembic/env.py) resolves .env by its own
+# absolute path; both now point at this same repo-root file, so the app and
+# Alembic agree on one database.
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
@@ -34,7 +44,7 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     FRONTEND_URL: str = "http://localhost:5173"
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    model_config = {"env_file": ENV_FILE, "extra": "ignore"}
 
 
 @lru_cache()
