@@ -16,7 +16,7 @@ class TestWorkflowExecutor:
     @pytest.mark.asyncio
     async def test_execute_workflow_not_found(self, db_session, test_workspace, test_user):
         execution = Execution(
-            workflow_id="nonexistent-wf",
+            workflow_id=None,
             workspace_id=test_workspace.id,
             status="pending",
             trigger_type="manual",

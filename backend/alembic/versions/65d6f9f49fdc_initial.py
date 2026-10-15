@@ -8,6 +8,7 @@ Create Date: 2026-02-12 12:38:16.111278
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '65d6f9f49fdc'
@@ -24,8 +25,8 @@ def upgrade() -> None:
     sa.Column('hashed_password', sa.String(length=255), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=True),
     sa.Column('avatar_url', sa.String(length=500), nullable=True),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
@@ -33,8 +34,8 @@ def upgrade() -> None:
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('owner_id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -44,10 +45,10 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('key_hash', sa.String(length=255), nullable=False),
     sa.Column('prefix', sa.String(length=20), nullable=False),
-    sa.Column('last_used_at', sa.DateTime(), nullable=True),
+    sa.Column('last_used_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_by', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -60,10 +61,10 @@ def upgrade() -> None:
     sa.Column('action', sa.String(length=100), nullable=False),
     sa.Column('resource_type', sa.String(length=50), nullable=True),
     sa.Column('resource_id', sa.String(length=36), nullable=True),
-    sa.Column('metadata', sa.JSON(), nullable=True),
+    sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('user_agent', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -75,9 +76,9 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('type', sa.String(length=50), nullable=False),
-    sa.Column('config', sa.JSON(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('config', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -87,13 +88,13 @@ def upgrade() -> None:
     sa.Column('workspace_id', sa.String(length=36), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('flow_definition', sa.JSON(), nullable=False),
+    sa.Column('flow_definition', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('status', sa.String(length=50), nullable=False),
     sa.Column('version', sa.Integer(), nullable=False),
     sa.Column('created_by', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('published_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('published_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -116,11 +117,11 @@ def upgrade() -> None:
     sa.Column('file_size', sa.Integer(), nullable=True),
     sa.Column('mime_type', sa.String(length=100), nullable=True),
     sa.Column('content', sa.Text(), nullable=True),
-    sa.Column('metadata', sa.JSON(), nullable=True),
+    sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('vector_ids', sa.Text(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['knowledge_base_id'], ['knowledge_bases.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -132,16 +133,16 @@ def upgrade() -> None:
     sa.Column('workflow_version', sa.Integer(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=False),
     sa.Column('trigger_type', sa.String(length=50), nullable=True),
-    sa.Column('input_data', sa.JSON(), nullable=True),
-    sa.Column('output_data', sa.JSON(), nullable=True),
+    sa.Column('input_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('output_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
-    sa.Column('execution_trace', sa.JSON(), nullable=True),
+    sa.Column('execution_trace', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('execution_time_ms', sa.Integer(), nullable=True),
-    sa.Column('token_usage', sa.JSON(), nullable=True),
+    sa.Column('token_usage', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('cost_usd', sa.Numeric(precision=10, scale=6), nullable=True),
-    sa.Column('started_at', sa.DateTime(), nullable=True),
-    sa.Column('completed_at', sa.DateTime(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['workflow_id'], ['workflows.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -153,20 +154,34 @@ def upgrade() -> None:
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('workflow_id', sa.String(length=36), nullable=False),
     sa.Column('version', sa.Integer(), nullable=False),
-    sa.Column('flow_definition', sa.JSON(), nullable=False),
+    sa.Column('flow_definition', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('changelog', sa.Text(), nullable=True),
     sa.Column('created_by', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
     sa.ForeignKeyConstraint(['workflow_id'], ['workflows.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id'),
-    sqlite_autoincrement=True
+    sa.PrimaryKeyConstraint('id')
     )
+    op.create_table(
+        'prompt_templates',
+        sa.Column('id', sa.String(length=36), nullable=False),
+        sa.Column('workspace_id', sa.String(length=36), nullable=False),
+        sa.Column('name', sa.String(length=255), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('content', sa.Text(), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id'),
+    )
+    op.create_index('ix_prompt_templates_workspace_id', 'prompt_templates', ['workspace_id'])
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index('ix_prompt_templates_workspace_id', table_name='prompt_templates')
+    op.drop_table('prompt_templates')
     op.drop_table('workflow_versions')
     op.drop_index(op.f('ix_executions_workspace_id'), table_name='executions')
     op.drop_index(op.f('ix_executions_workflow_id'), table_name='executions')
