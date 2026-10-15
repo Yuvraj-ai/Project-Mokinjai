@@ -4,6 +4,9 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$PROJECT_DIR/backend"
 FRONTEND_DIR="$PROJECT_DIR/frontend"
+# The local database this script provisions below (see the PostgreSQL section).
+# Migrations use this explicitly rather than whatever the repo-root .env says.
+LOCAL_DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder"
 PIDS=()
 
 cleanup() {
@@ -100,10 +103,13 @@ if [ ! -f "$PROJECT_DIR/.env" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
   echo "  Created .env from .env.example (edit it to add your API keys)."
 fi
 
-# Run migrations
+# Run migrations against the LOCAL database this script provisions above.
+# The app itself connects using DATABASE_URL from the repo-root .env, which may
+# point at a hosted instance; passing the local URL explicitly keeps this step
+# from running DDL wherever .env happens to point.
 echo "  Running database migrations..."
 cd "$BACKEND_DIR"
-"$BACKEND_DIR/venv/bin/alembic" upgrade head 2>&1 | tail -1
+DATABASE_URL="$LOCAL_DATABASE_URL" "$BACKEND_DIR/venv/bin/alembic" upgrade head 2>&1 | tail -1
 
 # --- Setup frontend if needed ---
 echo "[5/6] Setting up frontend..."

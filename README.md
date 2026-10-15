@@ -102,7 +102,9 @@ cp .env.example .env
 # Edit .env to add your API keys:
 #   OPENAI_API_KEY=sk-...
 #   ANTHROPIC_API_KEY=sk-ant-...
-#   JWT_SECRET_KEY=<generate-a-random-secret>
+#   JWT_SECRET_KEY=<python scripts/generate_jwt_secret.py>
+#   LLM_ENCRYPTION_KEY=<python scripts/generate_fernet_key.py>
+#   DATABASE_URL=<your PostgreSQL URL; the built-in default is a local fallback>
 
 # 3. Run everything
 ./run_mokinjay.sh
@@ -150,8 +152,11 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run database migrations
-alembic upgrade head
+# Run database migrations. Both the app and Alembic read DATABASE_URL from the
+# repo-root .env (loaded by absolute path, wherever you invoke them from). If
+# that URL points at a remote host, Alembic refuses to run unless you set
+# ALLOW_REMOTE_MIGRATIONS=1. To migrate a local database explicitly:
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder alembic upgrade head
 
 # Start the API server
 uvicorn app.main:app --reload --port 8000
@@ -188,9 +193,11 @@ This starts all services: PostgreSQL, Redis, Backend (port 8000), Celery worker,
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder` | Async PostgreSQL connection |
+| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder` | Async PostgreSQL connection used by both the app and Alembic. The built-in default is only a fallback: this repo's `.env` points it at the hosted Supabase instance (session pooler), which is where the app actually connects. |
+| `TEST_DATABASE_URL` | `postgresql+asyncpg://imyuvi@localhost:5432/mokinjay_test` | Database for the test suite. Must end in `_test` or the suite refuses to start. Read by `conftest.py`, never by the app. |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection |
-| `JWT_SECRET_KEY` | `your-super-secret-key-change-in-production` | JWT signing secret (**change this**) |
+| `JWT_SECRET_KEY` | `your-super-secret-key-change-in-production` | JWT signing secret (**change this**). Mint one with `python scripts/generate_jwt_secret.py`. |
+| `LLM_ENCRYPTION_KEY` | *(empty)* | Fernet key encrypting LLM API keys at rest. **Required to save an LLM profile** — blank makes `crypto.py` raise on first use. Mint one with `python scripts/generate_fernet_key.py` (rotating it makes every stored key undecryptable). |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime |
 | `OPENAI_API_KEY` | *(empty)* | OpenAI API key for Agent nodes |
