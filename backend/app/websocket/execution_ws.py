@@ -3,6 +3,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.database import async_session
 from app.logging import logger
 from app.middleware.auth import resolve_session_and_user
+from app.services.sessions import session_is_live
 from app.utils.errors import UnauthorizedException
 
 
@@ -54,15 +55,30 @@ async def execution_websocket(websocket: WebSocket, execution_id: str):
 
     async with async_session() as db:
         try:
-            await resolve_session_and_user(token, db)
+            session, _ = await resolve_session_and_user(token, db)
         except UnauthorizedException:
             logger.warning(f"WebSocket auth failed for execution {execution_id}")
             await websocket.close(code=4001)
             return
+        session_id = session.id
 
     await manager.connect(websocket, execution_id)
     try:
         while True:
-            data = await websocket.receive_text()
+            await websocket.receive_text()
+
+            # Re-validate on every inbound message: a socket accepted while the
+            # session was live must not keep receiving events after a logout revokes
+            # it. The loop only wakes when the client sends, so this is the earliest
+            # point the revocation can be noticed on an idle connection.
+            async with async_session() as db:
+                live = await session_is_live(session_id, db)
+            if not live:
+                logger.warning(
+                    f"WebSocket closing — session {session_id} was revoked or expired"
+                )
+                manager.disconnect(websocket, execution_id)
+                await websocket.close(code=4001)
+                return
     except WebSocketDisconnect:
         manager.disconnect(websocket, execution_id)

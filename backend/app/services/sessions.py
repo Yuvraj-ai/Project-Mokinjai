@@ -98,6 +98,27 @@ async def get_live_session(db: AsyncSession, refresh_token: str) -> Session | No
     return result.scalar_one_or_none()
 
 
+async def session_is_live(session_id: str, db: AsyncSession) -> bool:
+    """Whether a session id still names a usable session: unrevoked and unexpired.
+
+    The same liveness test `get_live_session` applies, keyed by id rather than by
+    token. Extracted into a standalone, separately testable function so a long-lived
+    caller — the execution WebSocket's receive loop, which has only a session id —
+    can re-check a connection that is already open. Without it, revocation is
+    enforced at connect only, and logout would not end an existing subscription.
+    """
+    live_id = (
+        await db.execute(
+            select(Session.id).where(
+                Session.id == session_id,
+                Session.revoked_at.is_(None),
+                Session.expires_at > datetime.now(timezone.utc),
+            )
+        )
+    ).scalar_one_or_none()
+    return live_id is not None
+
+
 async def revoke_session(db: AsyncSession, session: Session) -> None:
     """End one session. The row is kept so the logout leaves a trace."""
     session.revoked_at = datetime.now(timezone.utc)

@@ -23,6 +23,7 @@ from app.services.sessions import (
     prune_expired_sessions,
     revoke_all_sessions,
     revoke_session,
+    session_is_live,
 )
 from app.utils.errors import UnauthorizedException
 from app.utils.security import create_access_token
@@ -119,6 +120,34 @@ async def test_get_live_session_rejects_an_expired_session(db_session, test_user
     await db_session.commit()
 
     assert await get_live_session(db_session, token) is None
+
+
+async def test_session_is_live_is_true_for_a_fresh_session(db_session, test_user):
+    """The predicate the WebSocket receive loop calls to re-validate a connection."""
+    session = await create_session(
+        db_session, user_id=test_user.id, refresh_token=new_refresh_token()
+    )
+
+    assert await session_is_live(session.id, db_session) is True
+
+
+async def test_session_is_live_is_false_for_a_revoked_session(db_session, test_user):
+    session = await create_session(
+        db_session, user_id=test_user.id, refresh_token=new_refresh_token()
+    )
+    await revoke_session(db_session, session)
+
+    assert await session_is_live(session.id, db_session) is False
+
+
+async def test_session_is_live_is_false_for_an_expired_session(db_session, test_user):
+    session = await create_session(
+        db_session, user_id=test_user.id, refresh_token=new_refresh_token()
+    )
+    session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await db_session.commit()
+
+    assert await session_is_live(session.id, db_session) is False
 
 
 async def test_a_fourth_session_evicts_the_oldest(db_session, test_user):
