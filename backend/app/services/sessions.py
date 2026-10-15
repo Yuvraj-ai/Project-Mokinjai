@@ -8,7 +8,7 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -64,7 +64,7 @@ async def create_session(
                 Session.revoked_at.is_(None),
                 Session.expires_at > now,
             )
-            .order_by(Session.last_used_at)
+            .order_by(Session.last_used_at, Session.id)
         )
     ).scalars().all()
 

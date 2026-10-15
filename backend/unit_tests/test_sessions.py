@@ -5,9 +5,26 @@ given refresh token is allowed to exist, and marking it revoked ends that device
 access on the next request.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
+import pytest
+import pytest_asyncio
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.models.session import Session
+from app.services.sessions import (
+    create_session,
+    get_live_session,
+    hash_token,
+    new_refresh_token,
+    prune_expired_sessions,
+    revoke_all_sessions,
+    revoke_session,
+)
+from app.utils.errors import UnauthorizedException
+from app.utils.security import create_access_token
 
 
 async def test_session_persists_and_round_trips(db_session, test_user):
@@ -33,17 +50,6 @@ async def test_session_persists_and_round_trips(db_session, test_user):
     assert found.revoked_at is None
     assert found.created_at is not None, "created_at should come from the server default"
     assert found.last_used_at is not None, "last_used_at should come from the server default"
-
-
-from app.services.sessions import (
-    create_session,
-    get_live_session,
-    hash_token,
-    new_refresh_token,
-    prune_expired_sessions,
-    revoke_all_sessions,
-    revoke_session,
-)
 
 
 def test_refresh_tokens_are_random_256_bit_strings():
@@ -149,23 +155,12 @@ async def test_prune_deletes_only_long_expired_sessions(db_session, test_user):
     assert await get_live_session(db_session, fresh) is not None
 
 
-import asyncio
-
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-
-
 @pytest_asyncio.fixture(scope="function")
 async def service_session(engine):
     """A session the test drives itself, separate from the client's per-request one."""
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         yield session
-
-
-from sqlalchemy import select
-
-from app.models.session import Session
 
 
 async def test_login_creates_a_session(client, test_user, service_session):
@@ -307,12 +302,6 @@ async def test_logout_all_revokes_every_session_for_that_user(client, test_user)
 
     assert (await client.post("/api/auth/refresh", json={"refresh_token": first_token})).status_code == 401
     assert (await client.post("/api/auth/refresh", json={"refresh_token": second_token})).status_code == 401
-
-
-import pytest
-
-from app.utils.errors import UnauthorizedException
-from app.utils.security import create_access_token
 
 
 async def test_resolver_returns_the_session_and_user_for_a_live_token(

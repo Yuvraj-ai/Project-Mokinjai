@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
 from httpx import AsyncClient, ASGITransport
