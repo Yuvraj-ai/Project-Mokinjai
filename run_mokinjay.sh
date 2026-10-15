@@ -4,9 +4,6 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$PROJECT_DIR/backend"
 FRONTEND_DIR="$PROJECT_DIR/frontend"
-# The local database this script provisions below (see the PostgreSQL section).
-# Migrations use this explicitly rather than whatever the repo-root .env says.
-LOCAL_DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder"
 PIDS=()
 
 cleanup() {
@@ -55,12 +52,11 @@ else
   echo "  PostgreSQL started."
 fi
 
-# Check if agentbuilder database exists
-if ! PGPASSWORD=postgres psql -U postgres -h localhost -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw agentbuilder; then
-  echo "  Creating 'agentbuilder' database..."
-  PGPASSWORD=postgres createdb -U postgres -h localhost agentbuilder
-  echo "  Database created."
-fi
+# No database is provisioned here. The application connects using DATABASE_URL
+# from the repo-root .env — a hosted instance in the current setup — so creating a
+# local database would only produce one the app never touches. The local
+# PostgreSQL started above exists for the test suite, which runs against
+# `mokinjay_test` and refuses any database whose name does not end in `_test`.
 
 # --- Start Redis ---
 echo "[3/6] Checking Redis..."
@@ -103,13 +99,16 @@ if [ ! -f "$PROJECT_DIR/.env" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
   echo "  Created .env from .env.example (edit it to add your API keys)."
 fi
 
-# Run migrations against the LOCAL database this script provisions above.
-# The app itself connects using DATABASE_URL from the repo-root .env, which may
-# point at a hosted instance; passing the local URL explicitly keeps this step
-# from running DDL wherever .env happens to point.
-echo "  Running database migrations..."
+# Migrations are deliberately NOT run here. The application connects using
+# DATABASE_URL from the repo-root .env, which points at a hosted instance, and
+# Alembic refuses a remote target unless ALLOW_REMOTE_MIGRATIONS=1 is set. That
+# opt-in exists so DDL against a remote database stays a deliberate act rather
+# than a side effect of starting the app. Run migrations yourself when the schema
+# changes:
+#
+#   cd backend && ./venv/bin/python -m alembic upgrade head
+#   (prefix ALLOW_REMOTE_MIGRATIONS=1 when the target is the hosted instance)
 cd "$BACKEND_DIR"
-DATABASE_URL="$LOCAL_DATABASE_URL" "$BACKEND_DIR/venv/bin/alembic" upgrade head 2>&1 | tail -1
 
 # --- Setup frontend if needed ---
 echo "[5/6] Setting up frontend..."
