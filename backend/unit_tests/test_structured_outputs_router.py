@@ -32,8 +32,18 @@ def payload(name="MathReasoning", description="Reasoning steps, then the answer.
     }
 
 
-def headers_for(user: User) -> dict[str, str]:
-    token = create_access_token({"sub": user.id, "email": user.email})
+async def headers_for(db, user: User) -> dict[str, str]:
+    """A token for a user, backed by a real session.
+
+    The middleware validates the session behind a token's `sid`, so a token minted
+    without one is rejected. This mirrors the `auth_headers` fixture.
+    """
+    from app.services.sessions import create_session, new_refresh_token
+
+    session = await create_session(
+        db, user_id=user.id, refresh_token=new_refresh_token()
+    )
+    token = create_access_token({"sub": user.id, "email": user.email, "sid": session.id})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -281,7 +291,7 @@ async def test_viewer_can_read_but_not_write(client, db_session, test_workspace,
         WorkspaceMember(workspace_id=test_workspace.id, user_id=viewer_user.id, role="viewer")
     )
     await db_session.commit()
-    viewer_headers = headers_for(viewer_user)
+    viewer_headers = await headers_for(db_session, viewer_user)
 
     assert (await client.get(base, headers=viewer_headers)).status_code == 200
     assert (await client.post(base, json=payload("Other"), headers=viewer_headers)).status_code == 403
@@ -295,7 +305,7 @@ async def test_editor_can_write(client, db_session, test_workspace, viewer_user)
     await db_session.commit()
 
     response = await client.post(
-        url(test_workspace.id), json=payload(), headers=headers_for(viewer_user)
+        url(test_workspace.id), json=payload(), headers=await headers_for(db_session, viewer_user)
     )
     assert response.status_code == 200, response.text
 

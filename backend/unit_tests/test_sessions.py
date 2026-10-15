@@ -253,3 +253,30 @@ async def test_a_refresh_token_that_was_never_issued_is_rejected(client):
     )
 
     assert response.status_code == 401, response.text
+
+
+async def test_a_revoked_session_rejects_a_still_valid_access_token(
+    client, auth_headers, service_session
+):
+    """The defect being fixed: logout must end access, not wait 30 minutes.
+
+    The access token below is untouched and unexpired. Only its session is revoked.
+    """
+    ok = await client.get("/api/auth/me", headers=auth_headers)
+    assert ok.status_code == 200, ok.text
+
+    session = (await service_session.execute(select(Session))).scalar_one()
+    await revoke_session(service_session, session)
+
+    rejected = await client.get("/api/auth/me", headers=auth_headers)
+    assert rejected.status_code == 401, rejected.text
+
+
+async def test_a_token_without_a_session_id_is_rejected(client, test_user):
+    """Tokens issued before server-side sessions cannot be validated, so they fail."""
+    from app.utils.security import create_access_token
+
+    stale = create_access_token({"sub": test_user.id, "email": test_user.email})
+    response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {stale}"})
+
+    assert response.status_code == 401, response.text

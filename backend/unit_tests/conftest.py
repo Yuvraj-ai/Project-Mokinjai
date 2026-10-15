@@ -125,15 +125,29 @@ async def admin_user(db_session):
     return user
 
 
-@pytest.fixture(scope="function")
-def auth_headers(test_user):
-    token = create_access_token({"sub": test_user.id, "email": test_user.email})
+@pytest_asyncio.fixture(scope="function")
+async def auth_headers(test_user, db_session):
+    from app.services.sessions import create_session
+
+    session = await create_session(
+        db_session, user_id=test_user.id, refresh_token="fixture-refresh-token"
+    )
+    token = create_access_token(
+        {"sub": test_user.id, "email": test_user.email, "sid": session.id}
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(scope="function")
-def admin_headers(admin_user):
-    token = create_access_token({"sub": admin_user.id, "email": admin_user.email})
+@pytest_asyncio.fixture(scope="function")
+async def admin_headers(admin_user, db_session):
+    from app.services.sessions import create_session
+
+    session = await create_session(
+        db_session, user_id=admin_user.id, refresh_token="fixture-admin-refresh-token"
+    )
+    token = create_access_token(
+        {"sub": admin_user.id, "email": admin_user.email, "sid": session.id}
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
