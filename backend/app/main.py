@@ -16,8 +16,14 @@ from app.routers import (
 )
 from app.websocket.execution_ws import execution_websocket
 from app.services.otp_store import otp_store
+from app.services.sessions import prune_expired_sessions
+from app.database import async_session
 
 settings = get_settings()
+
+# Session pruning cadence. The cleanup loop ticks once a minute; this is how many
+# seconds must elapse between prunes.
+_PRUNE_INTERVAL_SECONDS = 24 * 60 * 60
 
 
 @asynccontextmanager
@@ -26,9 +32,31 @@ async def lifespan(app: FastAPI):
     logger.info(f"CORS allowed origin: {settings.FRONTEND_URL}")
 
     async def cleanup_loop():
+        """Housekeeping for the process: OTP expiry every minute, session pruning daily.
+
+        Pruning runs on the first tick so a process that restarts more often than
+        daily still reaps, then at most once per day. It opens its own session from
+        app.database.async_session: this loop runs outside any request, so there is
+        no request-scoped session to borrow.
+        """
+        seconds_until_prune = 0
         while True:
             await asyncio.sleep(60)
             otp_store.cleanup_expired()
+
+            if seconds_until_prune <= 0:
+                try:
+                    async with async_session() as db:
+                        removed = await prune_expired_sessions(db)
+                except Exception:
+                    # A transient database error must not kill the loop: that would
+                    # silently stop the OTP cleanup above too. Retry next cycle.
+                    logger.exception("Session pruning failed")
+                else:
+                    if removed:
+                        logger.info(f"Pruned {removed} expired session(s)")
+                seconds_until_prune = _PRUNE_INTERVAL_SECONDS
+            seconds_until_prune -= 60
 
     cleanup_task = asyncio.create_task(cleanup_loop())
     yield
