@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from celery import Celery
 from app.logging import logger
 from app.config import get_settings
@@ -21,4 +23,6 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
 )
 
-logger.info(f"Celery app initialized — broker: {settings.REDIS_URL}")
+# Host and port only: REDIS_URL can carry a password, so do not log it in full.
+_redis = urlsplit(settings.REDIS_URL)
+logger.info(f"Celery app initialized — broker: {_redis.hostname}:{_redis.port}")
