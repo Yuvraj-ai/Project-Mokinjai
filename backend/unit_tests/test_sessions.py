@@ -227,6 +227,31 @@ async def test_refresh_advances_last_used_at(client, test_user, service_session)
     assert after > before, "refresh must persist last_used_at, or eviction is not LRU"
 
 
+async def test_refresh_extends_the_session_expiry(client, test_user, service_session):
+    """Sliding renewal: an active session does not die on a fixed clock from login.
+
+    The refresh path must push `expires_at` forward, not merely record use. Without
+    this, a session ends exactly REFRESH_TOKEN_EXPIRE_DAYS after login however active
+    the user is — a silent conversion of "sessions never end" into "everyone is signed
+    out weekly". Revocation, not expiry, is what should bound a session's life.
+    """
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    before = (await service_session.execute(select(Session))).scalar_one().expires_at
+    await asyncio.sleep(0.01)  # timestamptz is microsecond-precision; make the delta real
+    refreshed = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+    assert refreshed.status_code == 200, refreshed.text
+
+    service_session.expire_all()  # drop the cached row, so the next read hits the database
+    after = (await service_session.execute(select(Session))).scalar_one().expires_at
+
+    assert after > before, "refresh must extend expires_at, or every session dies 7 days after login"
+
+
 async def test_refresh_fails_for_a_revoked_session(client, test_user, service_session):
     login = await client.post(
         "/api/auth/login",

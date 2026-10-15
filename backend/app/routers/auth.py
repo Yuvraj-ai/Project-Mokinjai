@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,10 +79,18 @@ async def refresh_token(request_body: RefreshRequest, db: AsyncSession = Depends
 
     # Only the access token is reissued: without rotation the refresh token stays
     # valid, and this write is what keeps `last_used_at` meaningful for eviction.
-    # The commit is load-bearing. Without it the assignment is discarded when the
+    #
+    # Sliding renewal: push `expires_at` a full REFRESH_TOKEN_EXPIRE_DAYS from now,
+    # so a regularly active user is never signed out. Expiry is not what bounds a
+    # session's life — revocation is; the fixed cap this replaced was an unstated
+    # regression to "everyone is signed out weekly".
+    #
+    # The commit is load-bearing. Without it both assignments are discarded when the
     # request's session closes, and eviction silently degrades from
     # least-recently-used to oldest-created.
-    session.last_used_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    session.last_used_at = now
+    session.expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     await db.commit()
 
     token_data = {"sub": user.id, "email": user.email, "sid": session.id}
