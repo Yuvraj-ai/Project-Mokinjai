@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+import app.models  # noqa: F401 - register every model so Base.metadata is complete
 from app.models.prompt import PromptTemplate
 
 # Every column that must be JSONB: (table, column).
@@ -35,6 +36,18 @@ async def test_all_json_columns_are_jsonb(db_session):
     )
     found = {(t, c) for t, c in rows}
     assert set(JSONB_COLUMNS) <= found, sorted(set(JSONB_COLUMNS) - found)
+
+    # The expected list only proves those columns *are* jsonb; a newly added
+    # sa.JSON column would slip through. The name says "all", so also assert
+    # nothing is plain json.
+    leftovers = await db_session.execute(
+        text(
+            "select table_name, column_name from information_schema.columns "
+            "where table_schema = 'public' and data_type = 'json'"
+        )
+    )
+    plain_json = sorted((t, c) for t, c in leftovers)
+    assert not plain_json, f"columns are still plain json, not jsonb: {plain_json}"
 
 
 async def test_server_defaults_are_read_back_without_a_refresh(db_session, test_workspace):
@@ -73,19 +86,23 @@ async def test_vector_ids_is_deliberately_not_an_array(db_session):
 
 
 async def test_no_sqlite_autoincrement_flag_remains():
-    """The flag configured SQLite's rowid aliasing; SQLite is retired (ADR-022).
+    """No table may carry SQLite's rowid-aliasing flag; SQLite is retired (ADR-022).
 
-    Retargeted from `Workflow` to `WorkflowVersion`: the flag is declared on
-    WorkflowVersion.__table_args__, and Workflow has no __table_args__ at all.
-    Asserting against Workflow raised AttributeError rather than testing anything.
+    Walks every table in the metadata rather than one class. The earlier version
+    read a single class's ``__table_args__``, which Task 3 emptied, so its loop
+    body never ran and it asserted nothing.
+
+    Checks the flag's resolved *value*: ``dialect_kwargs`` is a ``_DialectArgView``
+    whose ``in`` matches every known dialect argument, set or not.
     """
-    from app.models.workflow import WorkflowVersion
+    from app.database import Base
 
-    table_args = getattr(WorkflowVersion, "__table_args__", ())
-    entries = table_args if isinstance(table_args, tuple) else (table_args,)
-    for entry in entries:
-        if isinstance(entry, dict):
-            assert "sqlite_autoincrement" not in entry
+    offenders = [
+        table.name
+        for table in Base.metadata.tables.values()
+        if table.dialect_kwargs.get("sqlite_autoincrement")
+    ]
+    assert not offenders, f"tables still set sqlite_autoincrement: {offenders}"
 
 
 def test_aiosqlite_is_no_longer_a_dependency():

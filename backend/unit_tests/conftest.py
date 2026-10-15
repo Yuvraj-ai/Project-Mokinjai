@@ -1,7 +1,9 @@
 import os
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from dotenv import load_dotenv
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -14,6 +16,12 @@ from app.models.workflow import Workflow
 from app.models.execution import Execution
 from app.utils.security import hash_password, create_access_token
 
+
+# Load the repo-root .env so TEST_DATABASE_URL works as documented. Settings
+# loads .env through pydantic-settings, which does not populate os.environ, so
+# without this an os.getenv() read would never see a .env entry. A missing file
+# is fine — the hardcoded default below is the fallback.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://imyuvi@localhost:5432/mokinjay_test"
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
