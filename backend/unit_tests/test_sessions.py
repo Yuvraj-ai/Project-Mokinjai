@@ -280,3 +280,30 @@ async def test_a_token_without_a_session_id_is_rejected(client, test_user):
     response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {stale}"})
 
     assert response.status_code == 401, response.text
+
+
+async def test_logout_revokes_the_callers_session(client, auth_headers):
+    assert (await client.get("/api/auth/me", headers=auth_headers)).status_code == 200
+
+    out = await client.post("/api/auth/logout", headers=auth_headers)
+    assert out.status_code == 200, out.text
+
+    assert (await client.get("/api/auth/me", headers=auth_headers)).status_code == 401
+
+
+async def test_logout_all_revokes_every_session_for_that_user(client, test_user):
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    second_token = login.json()["refresh_token"]
+
+    response = await client.post("/api/auth/login", json={"email": "test@example.com", "password": "testpass123"})
+    first_token = response.json()["refresh_token"]
+
+    # Log out the second device, then end the rest.
+    assert (await client.post("/api/auth/refresh", json={"refresh_token": first_token})).status_code == 200
+    await client.post("/api/auth/logout-all", headers={"Authorization": f"Bearer {response.json()['access_token']}"})
+
+    assert (await client.post("/api/auth/refresh", json={"refresh_token": first_token})).status_code == 401
+    assert (await client.post("/api/auth/refresh", json={"refresh_token": second_token})).status_code == 401

@@ -12,12 +12,15 @@ from app.schemas.user import UserResponse
 from app.utils.security import verify_password, create_access_token
 from app.utils.errors import UnauthorizedException, OTPException
 from app.config import get_settings
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, get_current_session
+from app.models.session import Session
 from app.services.otp_store import otp_store
 from app.services.sessions import (
     create_session,
     get_live_session,
     new_refresh_token,
+    revoke_all_sessions,
+    revoke_session,
 )
 from app.services.telegram import send_telegram_message
 
@@ -88,6 +91,28 @@ async def refresh_token(request_body: RefreshRequest, db: AsyncSession = Depends
         access_token=create_access_token(token_data),
         refresh_token=request_body.refresh_token,
     )
+
+
+@router.post("/logout")
+async def logout(
+    session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """End this device's session. Its tokens stop working on the next request."""
+    await revoke_session(db, session)
+    logger.info(f"Session revoked on logout: {session.id}")
+    return {"success": True}
+
+
+@router.post("/logout-all")
+async def logout_all(
+    session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """End every session for this user — the 'sign out everywhere' case."""
+    revoked = await revoke_all_sessions(db, session.user_id)
+    logger.info(f"Revoked {revoked} session(s) for user {session.user_id}")
+    return {"success": True, "revoked": revoked}
 
 
 @router.get("/me", response_model=UserResponse)
