@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.session import Session
@@ -71,6 +72,20 @@ async def test_create_session_stores_the_hash_not_the_token(db_session, test_use
 
     assert session.token_hash == hash_token(token)
     assert token not in session.token_hash
+
+
+async def test_two_sessions_cannot_share_a_token_hash(db_session, test_user):
+    """`token_hash` is UNIQUE, and nothing else in the suite would notice if it were not.
+
+    test_schema_parity.py compares only nullability and server defaults, never indexes,
+    so dropping `unique=True` from the model or the migration would leave every other
+    test green while permitting two sessions to share one refresh token. This is the
+    cheapest test that pins the property.
+    """
+    await create_session(db_session, user_id=test_user.id, refresh_token="shared-token")
+
+    with pytest.raises(IntegrityError):
+        await create_session(db_session, user_id=test_user.id, refresh_token="shared-token")
 
 
 async def test_get_live_session_finds_a_fresh_session(db_session, test_user):
