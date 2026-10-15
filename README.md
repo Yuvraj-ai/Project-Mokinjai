@@ -20,7 +20,7 @@ A visual AI agent builder platform where users create, configure, and run AI wor
 |-------|------------|
 | **Frontend** | React 19, TypeScript, Vite 7, React Flow 12, Zustand, TanStack Query, Tailwind CSS 3 |
 | **Backend** | Python, FastAPI, SQLAlchemy 2.0 (async), Pydantic v2, Alembic |
-| **Database** | PostgreSQL 14+ (SQLite for development) |
+| **Database** | PostgreSQL 14+ |
 | **Queue** | Celery + Redis 7+ |
 | **Auth** | JWT (access + refresh tokens) |
 | **LLM** | OpenAI SDK, Anthropic SDK, Google Gemini |
