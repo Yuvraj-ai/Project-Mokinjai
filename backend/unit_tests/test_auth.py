@@ -34,8 +34,13 @@ class TestLogin:
 class TestRefresh:
     @pytest.mark.asyncio
     async def test_refresh_success(self, client, test_user):
-        from app.utils.security import create_refresh_token
-        refresh = create_refresh_token({"sub": test_user.id, "email": test_user.email})
+        # A refresh token is only valid while its session row is live, so one has
+        # to be issued by an actual login rather than minted directly.
+        login = await client.post("/api/auth/login", json={
+            "email": "test@example.com",
+            "password": "testpass123",
+        })
+        refresh = login.json()["refresh_token"]
         response = await client.post("/api/auth/refresh", json={
             "refresh_token": refresh,
         })

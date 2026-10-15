@@ -24,6 +24,8 @@ def create_access_token(data: dict) -> str:
     return token
 
 
+# UNUSED as of server-side sessions: refresh tokens are now opaque strings recorded
+# in the `sessions` table, not signed JWTs. Kept until nothing references it.
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)

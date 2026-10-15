@@ -147,3 +147,109 @@ async def test_prune_deletes_only_long_expired_sessions(db_session, test_user):
     assert removed == 1
     assert await get_live_session(db_session, stale) is None
     assert await get_live_session(db_session, fresh) is not None
+
+
+import asyncio
+
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+
+@pytest_asyncio.fixture(scope="function")
+async def service_session(engine):
+    """A session the test drives itself, separate from the client's per-request one."""
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        yield session
+
+
+from sqlalchemy import select
+
+from app.models.session import Session
+
+
+async def test_login_creates_a_session(client, test_user, service_session):
+    response = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    stored = (await service_session.execute(select(Session))).scalar_one()
+    assert stored.token_hash == hash_token(body["refresh_token"])
+    assert body["refresh_token"] not in stored.token_hash
+
+
+async def test_login_access_token_carries_a_session_id(client, test_user, service_session):
+    from app.utils.security import decode_token
+
+    response = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    payload = decode_token(response.json()["access_token"])
+
+    session = (await service_session.execute(select(Session))).scalar_one()
+    assert payload["sid"] == session.id
+
+
+async def test_refresh_works_for_a_live_session(client, test_user):
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    response = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["access_token"]
+
+
+async def test_refresh_advances_last_used_at(client, test_user, service_session):
+    """The eviction order depends on this write reaching the database.
+
+    Without a commit in the refresh path the assignment is discarded when the
+    request's session closes, and eviction silently degrades from
+    least-recently-used to oldest-created. Nothing else in the suite would notice.
+    """
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    before = (await service_session.execute(select(Session))).scalar_one().last_used_at
+    await asyncio.sleep(0.01)  # timestamptz is microsecond-precision; make the delta real
+    refreshed = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+    assert refreshed.status_code == 200, refreshed.text
+
+    service_session.expire_all()  # drop the cached row, so the next read hits the database
+    after = (await service_session.execute(select(Session))).scalar_one().last_used_at
+
+    assert after > before, "refresh must persist last_used_at, or eviction is not LRU"
+
+
+async def test_refresh_fails_for_a_revoked_session(client, test_user, service_session):
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "testpass123"},
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    session = (await service_session.execute(select(Session))).scalar_one()
+    await revoke_session(service_session, session)
+
+    response = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+
+    assert response.status_code == 401, response.text
+
+
+async def test_a_refresh_token_that_was_never_issued_is_rejected(client):
+    response = await client.post(
+        "/api/auth/refresh", json={"refresh_token": new_refresh_token()}
+    )
+
+    assert response.status_code == 401, response.text

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -7,11 +9,16 @@ from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from app.schemas.otp import OTPSendResponse, OTPValidateRequest, OTPValidateResponse
 from app.schemas.user import UserResponse
-from app.utils.security import verify_password, create_access_token, create_refresh_token, decode_token
+from app.utils.security import verify_password, create_access_token
 from app.utils.errors import UnauthorizedException, OTPException
 from app.config import get_settings
 from app.middleware.auth import get_current_user
 from app.services.otp_store import otp_store
+from app.services.sessions import (
+    create_session,
+    get_live_session,
+    new_refresh_token,
+)
 from app.services.telegram import send_telegram_message
 
 settings = get_settings()
@@ -19,45 +26,67 @@ settings = get_settings()
 router = APIRouter()
 
 
+async def _issue_tokens(db: AsyncSession, user: User, request: Request) -> TokenResponse:
+    """Mint a session and the token pair for it.
+
+    Every path that logs someone in must come through here. A token minted
+    without a session authenticates normally and can never be revoked, which is
+    the failure this whole change exists to prevent.
+    """
+    refresh_token = new_refresh_token()
+    session = await create_session(
+        db,
+        user_id=user.id,
+        refresh_token=refresh_token,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    access_token = create_access_token(
+        {"sub": user.id, "email": user.email, "sid": session.id}
+    )
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    logger.info(f"Login attempt for email: {request.email}")
-    result = await db.execute(select(User).where(User.email == request.email))
+async def login(request_body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    logger.info(f"Login attempt for email: {request_body.email}")
+    result = await db.execute(select(User).where(User.email == request_body.email))
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(request.password, user.hashed_password):
-        logger.warning(f"Login failed — invalid credentials for: {request.email}")
+    if user is None or not verify_password(request_body.password, user.hashed_password):
+        logger.warning(f"Login failed — invalid credentials for: {request_body.email}")
         raise UnauthorizedException("Invalid email or password")
 
-    token_data = {"sub": user.id, "email": user.email}
     logger.info(f"Login successful: {user.id} ({user.email})")
-    return TokenResponse(
-        access_token=create_access_token(token_data),
-        refresh_token=create_refresh_token(token_data),
-    )
+    return await _issue_tokens(db, user, request)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh_token(request_body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     logger.debug("Token refresh attempt")
-    payload = decode_token(request.refresh_token)
-    if payload is None or payload.get("type") != "refresh":
-        logger.warning("Token refresh failed — invalid refresh token")
+    session = await get_live_session(db, request_body.refresh_token)
+    if session is None:
+        logger.warning("Token refresh failed — no live session for this token")
         raise UnauthorizedException("Invalid refresh token")
 
-    user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
+    user = await db.get(User, session.user_id)
     if user is None:
-        logger.warning(f"Token refresh failed — user {user_id} not found")
+        logger.warning(f"Token refresh failed — user {session.user_id} not found")
         raise UnauthorizedException("User not found")
 
-    token_data = {"sub": user.id, "email": user.email}
+    # Only the access token is reissued: without rotation the refresh token stays
+    # valid, and this write is what keeps `last_used_at` meaningful for eviction.
+    # The commit is load-bearing. Without it the assignment is discarded when the
+    # request's session closes, and eviction silently degrades from
+    # least-recently-used to oldest-created.
+    session.last_used_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    token_data = {"sub": user.id, "email": user.email, "sid": session.id}
     logger.info(f"Token refreshed for user: {user.id}")
     return TokenResponse(
         access_token=create_access_token(token_data),
-        refresh_token=create_refresh_token(token_data),
+        refresh_token=request_body.refresh_token,
     )
 
 
@@ -101,13 +130,14 @@ async def admin_send_otp(db: AsyncSession = Depends(get_db)):
 
 @router.post("/admin/otp/validate", response_model=OTPValidateResponse)
 async def admin_validate_otp(
-    request: OTPValidateRequest,
+    request_body: OTPValidateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Validate the OTP and return JWT tokens for the admin user."""
     logger.info("Admin OTP validation attempt")
 
-    valid = otp_store.validate(request.session_token, request.code)
+    valid = otp_store.validate(request_body.session_token, request_body.code)
     if not valid:
         logger.warning("Admin OTP validation failed — invalid or expired code")
         raise OTPException(status_code=401, detail="Invalid or expired OTP")
@@ -117,12 +147,9 @@ async def admin_validate_otp(
     if admin_user is None:
         raise OTPException(status_code=500, detail="Admin user not configured")
 
-    token_data = {"sub": admin_user.id, "email": admin_user.email}
-    access = create_access_token(token_data)
-    refresh = create_refresh_token(token_data)
-
     logger.info(f"Admin login successful via OTP: {admin_user.id}")
+    tokens = await _issue_tokens(db, admin_user, request)
     return OTPValidateResponse(
-        access_token=access,
-        refresh_token=refresh,
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
     )
