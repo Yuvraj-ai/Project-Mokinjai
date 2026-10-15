@@ -7,6 +7,7 @@ from app.models.api_key import ApiKey, AuditLog
 from app.models.prompt import PromptTemplate
 from app.models.llm_profile import LlmProfile
 from app.models.structured_output import StructuredOutput
+from app.models.session import Session
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "PromptTemplate",
     "LlmProfile",
     "StructuredOutput",
+    "Session",
 ]
