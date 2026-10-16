@@ -7,9 +7,14 @@ from app.models.workspace import WorkspaceMember
 from app.models.knowledge import KnowledgeBase
 from app.schemas.knowledge import KnowledgeBaseCreate, KnowledgeBaseResponse
 from app.middleware.rbac import require_workspace_role
-from app.utils.errors import NotFoundException
+from app.utils.errors import BadRequestException, NotFoundException
 
 router = APIRouter()
+
+# Only "document" is supported: a url knowledge base implies fetching and crawling, and
+# an api knowledge base has no design at all. The set lives here rather than in a database
+# constraint so widening it later needs no migration.
+SUPPORTED_KNOWLEDGE_BASE_TYPES = ("document",)
 
 
 @router.post("", response_model=KnowledgeBaseResponse)
@@ -19,6 +24,12 @@ async def create_knowledge_base(
     _member: WorkspaceMember = Depends(require_workspace_role("editor")),
     db: AsyncSession = Depends(get_db),
 ):
+    if request.type not in SUPPORTED_KNOWLEDGE_BASE_TYPES:
+        raise BadRequestException(
+            f"Unsupported knowledge base type {request.type!r}. Only "
+            f"{', '.join(repr(t) for t in SUPPORTED_KNOWLEDGE_BASE_TYPES)} is supported; "
+            "'url' and 'api' have no design yet."
+        )
     logger.info(f"Creating knowledge base '{request.name}' in workspace {workspace_id}")
     kb = KnowledgeBase(
         workspace_id=workspace_id,
@@ -42,7 +53,9 @@ async def list_knowledge_bases(
 ):
     logger.debug(f"Listing knowledge bases for workspace {workspace_id}")
     result = await db.execute(
-        select(KnowledgeBase).where(KnowledgeBase.workspace_id == workspace_id)
+        select(KnowledgeBase)
+        .where(KnowledgeBase.workspace_id == workspace_id)
+        .order_by(KnowledgeBase.created_at.desc())
     )
     return result.scalars().all()
 
