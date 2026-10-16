@@ -27,6 +27,9 @@ class Workspace(Base):
     )
     tools = relationship("Tool", back_populates="workspace", cascade="all, delete-orphan")
     skills = relationship("Skill", back_populates="workspace", cascade="all, delete-orphan")
+    external_database_connections = relationship(
+        "ExternalDatabaseConnection", back_populates="workspace", cascade="all, delete-orphan"
+    )
 
 
 class WorkspaceMember(Base):
