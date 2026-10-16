@@ -157,9 +157,19 @@ export default function ConnectorsPage() {
 
   const handleDelete = async (connector: Connector) => {
     if (!workspaceId) return
-    await deleteConnector(workspaceId, connector.id)
-    setConnectors((current) => current.filter((item) => item.id !== connector.id))
-    if (editingId === connector.id) setShowForm(false)
+    try {
+      await deleteConnector(workspaceId, connector.id)
+      setConnectors((current) => current.filter((item) => item.id !== connector.id))
+      if (editingId === connector.id) setShowForm(false)
+    } catch (error: unknown) {
+      setConnectors((current) =>
+        current.map((item) =>
+          item.id === connector.id
+            ? { ...item, status: 'error', last_error: axiosDetail(error) || 'Could not delete connector' }
+            : item
+        )
+      )
+    }
   }
 
   if (loading || !workspaceId) {
