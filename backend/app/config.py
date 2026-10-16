@@ -44,6 +44,21 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Object storage (ADR-011). Empty credentials select the filesystem backend; a
+    # complete S3 credential set selects object storage. Resolved by
+    # app/services/storage/__init__.py:get_storage() and read nowhere else, so the
+    # selection rule has exactly one home.
+    STORAGE_LOCAL_PATH: str = str(Path(__file__).resolve().parents[1] / "storage")
+    STORAGE_S3_BUCKET: str = ""
+    STORAGE_S3_ENDPOINT_URL: str = ""
+    STORAGE_S3_REGION: str = "us-east-1"
+    STORAGE_S3_ACCESS_KEY_ID: str = ""
+    STORAGE_S3_SECRET_ACCESS_KEY: str = ""
+
+    # Upload ceiling, enforced while reading the body (Task 5). A handler limit, not a
+    # transport limit: see the spec's section 3.
+    STORAGE_MAX_UPLOAD_BYTES: int = 25 * 1024 * 1024
+
     model_config = {"env_file": ENV_FILE, "extra": "ignore"}
 
 

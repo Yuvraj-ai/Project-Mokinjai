@@ -83,3 +83,6 @@ docs/
 memory.md
 keys.txt
 .superpowers/
+
+# Uploaded files (local storage backend)
+backend/storage/
