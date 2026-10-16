@@ -187,6 +187,30 @@ def extract_schema(source: str) -> ExtractionResult:
             )
         return ExtractionResult(None, [" ".join(f"{problem}." for problem in problems)])
 
+    # Both of these would make `ToolParameter` raise; the module returns errors
+    # rather than raising, so they are checked here.
+    undescribed = [name for name in names if not documented[name]]
+    if undescribed:
+        return ExtractionResult(
+            None,
+            [
+                "Every parameter needs a description in `Args:`. Empty for: "
+                + ", ".join(f"`{name}`" for name in undescribed)
+                + "."
+            ],
+        )
+
+    overlong = [name for name in names if len(name) > MAX_NAME_LENGTH]
+    if overlong:
+        return ExtractionResult(
+            None,
+            [
+                f"Parameter names are limited to {MAX_NAME_LENGTH} characters. Too long: "
+                + ", ".join(f"`{name}`" for name in overlong)
+                + "."
+            ],
+        )
+
     resolved: dict[str, _Annotation] = {}
     undescribable: list[str] = []
     for node in arguments:

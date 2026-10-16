@@ -291,6 +291,10 @@ class TestRejections:
                 'def one(*values: str) -> str:\n    """Do a thing.\n\n    Args:\n        values: The values.\n    """\n    return values\n',
                 "*values",
             ),
+            (
+                'def one(value: str) -> str:\n    """Do a thing.\n\n    Args:\n        value:\n    """\n    return value\n',
+                "Empty for",
+            ),
         ],
     )
     def test_each_rejection_names_what_is_missing(self, source, expected):
@@ -298,6 +302,23 @@ class TestRejections:
 
         assert result.schema is None
         assert any(expected in error for error in result.errors), result.errors
+
+    def test_a_parameter_name_longer_than_the_limit_is_rejected(self):
+        name = "value" * 13  # 65 characters
+        result = extract_schema(
+            f'''
+def one({name}: str) -> str:
+    """Do a thing.
+
+    Args:
+        {name}: The value.
+    """
+    return {name}
+'''
+        )
+
+        assert result.schema is None
+        assert "limited to 64 characters" in result.errors[0]
 
     def test_a_syntax_error_reports_the_line(self):
         result = extract_schema('def broken( -> str:')
