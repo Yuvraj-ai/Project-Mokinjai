@@ -17,7 +17,7 @@ from app.services.sandbox.backends import (
     kernel_failure,
     select_backend,
 )
-from app.services.sandbox.docker_backend import DockerBackend
+from app.services.sandbox.docker_backend import DockerBackend, sweep
 from app.services.sandbox.errors import ErrorInfo, ErrorKind, SandboxError
 from app.services.sandbox.protocol import (
     JobRequest,
@@ -44,4 +44,5 @@ __all__ = [
     "kernel_failure",
     "select_backend",
     "send_request",
+    "sweep",
 ]

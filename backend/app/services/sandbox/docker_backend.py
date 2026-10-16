@@ -177,7 +177,7 @@ class DockerBackend:
                 stderr=subprocess.PIPE,
             )
             with tarfile.open(fileobj=tar_proc.stdout, mode="r|*") as archive:
-                archive.extractall(staging)
+                archive.extractall(staging, filter="data")
             tar_proc.wait(timeout=self._command_timeout)
         except Exception as exc:
             logger.warning(f"Collecting sandbox output failed: {exc}")
@@ -230,7 +230,13 @@ class DockerBackend:
     def _await_socket(self, budget: float = 30.0) -> None:
         deadline = time.monotonic() + budget
         while time.monotonic() < deadline:
-            if os.path.exists(self._spec.host_socket_path) and self.is_alive():
+            if not self.is_alive():
+                raise SandboxError(
+                    ErrorKind.CONTAINER_ERROR,
+                    "The sandbox container exited unexpectedly during startup.",
+                    self._container_logs(),
+                )
+            if os.path.exists(self._spec.host_socket_path):
                 return
             time.sleep(0.05)
         raise SandboxError(
