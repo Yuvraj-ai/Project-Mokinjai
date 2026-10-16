@@ -13,6 +13,7 @@ from app.routers import (
     prompts,
     llm_profiles,
     structured_outputs,
+    skills,
     tools,
 )
 from app.websocket.execution_ws import execution_websocket
@@ -100,6 +101,11 @@ app.include_router(
     tags=["structured-outputs"],
 )
 app.include_router(tools.router, prefix="/api/workspaces/{workspace_id}/tools", tags=["tools"])
+app.include_router(
+    skills.router,
+    prefix="/api/workspaces/{workspace_id}/skills",
+    tags=["skills"],
+)
 
 
 @app.get("/health")
