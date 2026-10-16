@@ -251,7 +251,7 @@ class SubprocessBackend:
         finally:
             log.close()
         try:
-            _await_socket(self._spec.host_socket_path, self._process, self._kernel_log())
+            _await_socket(self._spec.host_socket_path, self._process, self._kernel_log)
         except SandboxError:
             self.stop()
             raise
@@ -304,25 +304,32 @@ class SubprocessBackend:
             return handle.read().decode("utf-8", "replace")[-2000:]
 
 
-def _await_socket(socket_path: str, process: subprocess.Popen, log: str, budget: float = 15.0):
+def _await_socket(
+    socket_path: str,
+    process: subprocess.Popen,
+    log: Callable[[], str] | str,
+    budget: float = 15.0,
+):
     """Wait for the kernel to create its socket, or fail with what it printed."""
     import time
 
+    get_log = log if callable(log) else (lambda: log)
     deadline = time.monotonic() + budget
     while time.monotonic() < deadline:
         if os.path.exists(socket_path):
             return
         if process.poll() is not None:
+            log_output = get_log()
             raise SandboxError(
                 ErrorKind.CONTAINER_ERROR,
                 "The sandbox kernel exited before it was ready.",
-                log or f"exit code {process.returncode}",
+                log_output or f"exit code {process.returncode}",
             )
         time.sleep(0.02)
     raise SandboxError(
         ErrorKind.CONTAINER_ERROR,
         "The sandbox kernel did not become ready in time.",
-        log,
+        get_log(),
     )
 
 
