@@ -9,6 +9,7 @@ from app.models.llm_profile import LlmProfile
 from app.models.structured_output import StructuredOutput
 from app.models.session import Session
 from app.models.tool import Tool
+from app.models.skill import Skill
 
 __all__ = [
     "User",
@@ -26,4 +27,5 @@ __all__ = [
     "StructuredOutput",
     "Session",
     "Tool",
+    "Skill",
 ]
