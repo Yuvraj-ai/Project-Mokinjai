@@ -13,6 +13,7 @@ from app.database import get_db
 from app.logging import logger
 from app.middleware.auth import get_current_user
 from app.middleware.rbac import require_workspace_role
+from app.models.skill import Skill
 from app.models.tool import Tool
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
@@ -26,6 +27,7 @@ from app.schemas.tool import (
     ToolValidateResponse,
     ToolWriteRequest,
 )
+from app.services.skill import extract_references
 from app.services.tool_schema import compile_input_schema, extract_schema
 from app.tools import BUILTIN_TOOLS, list_builtin_tools
 from app.utils.errors import BadRequestException, ConflictException, NotFoundException
@@ -80,6 +82,21 @@ async def _load_row(db: AsyncSession, workspace_id: str, tool_id: str) -> Tool:
     if row is None:
         raise NotFoundException("Tool")
     return row
+
+
+async def _skill_referrers(db: AsyncSession, workspace_id: str, tool_name: str) -> list[str]:
+    """Names of workspace skills whose content references `tool_name` with a `/`."""
+    wanted = tool_name.lower()
+    rows = (
+        await db.execute(
+            select(Skill.name, Skill.content).where(Skill.workspace_id == workspace_id)
+        )
+    ).all()
+    return sorted(
+        name
+        for name, content in rows
+        if any(ref.lower() == wanted for ref in extract_references(content).tool_refs)
+    )
 
 
 def _assert_name_is_free(rows: list[Tool], name: str, *, exclude_id: str | None) -> None:
@@ -242,11 +259,19 @@ async def delete_tool(
 ):
     """Delete a tool.
 
-    Nothing can reference one yet, so there is nothing to block on. When the
-    `skills` table lands, a tool a skill's `/ToolName` points at must be refused
-    here with 409, the way `/structured-outputs` refuses a referenced definition.
+    A tool a skill's `/ToolName` points at is refused here with 409, the way
+    `/structured-outputs` refuses a referenced definition: the reference would
+    dangle, and the autocomplete menu would name a tool the workspace no longer
+    has. Remove the reference first.
     """
     row = await _load_row(db, workspace_id, tool_id)
+
+    referrers = await _skill_referrers(db, workspace_id, row.name)
+    if referrers:
+        raise ConflictException(
+            f"Cannot delete: referenced by {', '.join(referrers)}. Remove the reference first."
+        )
+
     await db.delete(row)
     await db.commit()
     logger.info(f"Tool '{row.name}' deleted")

@@ -334,7 +334,9 @@ def compile_skills(
       by reading a parent's content, where the pointer is visible, not from the
       menu; listing it would grow the startup prompt with the whole closure.
     - `contents` is the whole reachable closure, which is the scope `read_skill`
-      may serve. A name outside it must be refused (ADR-016).
+      may serve. A name outside it must be refused (ADR-016). It is keyed by each
+      skill's canonical `name`, and a `@` reference resolves case-insensitively,
+      so a consumer must resolve the name first.
     - `tool_names` is the union of `/` references across that closure, because
       tools are never lazy: when the LLM reads a sub-skill that depends on a
       tool, that tool must already be in the tool list.

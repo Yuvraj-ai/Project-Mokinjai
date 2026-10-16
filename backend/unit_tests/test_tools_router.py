@@ -8,6 +8,7 @@ read derives, and who is allowed to do what.
 import pytest_asyncio
 from sqlalchemy import select
 
+from app.models.skill import Skill
 from app.models.tool import Tool
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
@@ -388,4 +389,40 @@ async def test_delete_removes_the_tool(client, test_workspace, auth_headers):
 
     assert deleted.status_code == 200
     assert deleted.json() == {"success": True}
+    assert (await client.get(base, headers=auth_headers)).json()["total"] == 0
+
+
+async def test_a_referenced_tool_cannot_be_deleted(
+    client, db_session, test_workspace, auth_headers
+):
+    """A skill's `/ToolName` blocks the delete, the way `/structured-outputs` does."""
+    base = url(test_workspace.id)
+    created = (
+        await client.post(
+            base, json={"code": WEATHER.replace("get_weather", "SearchWeb")}, headers=auth_headers
+        )
+    ).json()
+
+    skill = Skill(
+        workspace_id=test_workspace.id,
+        name="Writer",
+        description="Write well.",
+        content="Call /SearchWeb.",
+    )
+    db_session.add(skill)
+    await db_session.commit()
+    await db_session.refresh(skill)
+
+    blocked = await client.delete(f"{base}/{created['id']}", headers=auth_headers)
+
+    assert blocked.status_code == 409, blocked.text
+    assert "referenced by" in blocked.json()["detail"]
+    assert "Writer" in blocked.json()["detail"]
+
+    await db_session.delete(skill)
+    await db_session.commit()
+
+    allowed = await client.delete(f"{base}/{created['id']}", headers=auth_headers)
+
+    assert allowed.status_code == 200, allowed.text
     assert (await client.get(base, headers=auth_headers)).json()["total"] == 0

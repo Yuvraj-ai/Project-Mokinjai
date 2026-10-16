@@ -312,6 +312,12 @@ class TestCompile:
 
         assert compiled.contents["Parent"] == "Follow @Child."
 
+    def test_a_case_different_reference_resolves_to_the_canonical_content_key(self):
+        parent = skill("Parent", content="Follow @writer.")
+        child = skill("Writer", content="Be terse.")
+        compiled = compile_skills(["Parent"], defs(parent, child))
+        assert compiled.contents["Writer"] == "Be terse."
+
     def test_a_root_tool_reference_is_collected(self):
         parent = skill("Parent", content="Call /SearchWeb.")
 
