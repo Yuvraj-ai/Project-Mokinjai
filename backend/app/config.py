@@ -39,6 +39,22 @@ class Settings(BaseSettings):
     # OTP
     OTP_EXPIRY_SECONDS: int = 300
 
+    # Sandbox (ADR-010). These are the limits untrusted code runs under.
+    # SANDBOX_BACKEND is "auto" (prefer Docker, fall back to the subprocess),
+    # "docker" (require Docker — a deployment can refuse to run un-isolated), or
+    # "subprocess" (never touch Docker; what the suite uses where the socket is not
+    # reachable).
+    SANDBOX_BACKEND: str = "auto"
+    SANDBOX_IMAGE: str = "mokinjay-sandbox:1"
+    SANDBOX_DOCKER_BIN: str = "docker"
+    SANDBOX_MEMORY: str = "256m"
+    SANDBOX_CPUS: str = "0.5"
+    SANDBOX_OUTPUT_TMPFS_MB: int = 64
+    SANDBOX_WORK_TMPFS_MB: int = 64
+    SANDBOX_TIMEOUT_SECONDS: float = 30.0
+    SANDBOX_KERNEL_GRACE_SECONDS: float = 10.0
+    SANDBOX_MAX_RUN_SECONDS: int = 1800
+
     # App
     BACKEND_HOST: str = "0.0.0.0"
     BACKEND_PORT: int = 8000
