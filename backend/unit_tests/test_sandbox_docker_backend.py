@@ -180,3 +180,32 @@ class TestSweep:
             assert run("docker", "ps", "-q", "--filter", f"name={name}").stdout.strip() != ""
         finally:
             run("docker", "rm", "-f", name)
+
+
+class TestExecutePythonInTheContainer:
+    def test_the_data_mount_is_read_only_and_output_is_collected(self, tmp_path):
+        from app.services.sandbox.session import SandboxSession
+
+        (tmp_path / "documents").mkdir()
+        (tmp_path / "documents" / "note.txt").write_text("mounted")
+        config = SandboxConfig()
+
+        session = SandboxSession(config=config, data_dir=str(tmp_path / "documents"))
+        try:
+            result = session.execute_python(
+                "print(open('/app/data/note.txt').read(), end='')\n"
+                "try:\n"
+                "    open('/app/data/note.txt', 'w').write('no')\n"
+                "except OSError:\n"
+                "    print('|read-only')\n"
+                "open('/app/output/report.csv', 'w').write('a,b\\n1,2\\n')\n",
+            )
+        finally:
+            session.close()
+
+        assert result.error is None, result.error
+        assert result.stdout == "mounted|read-only\n"
+        assert [(f.name, f.data) for f in result.generated_files] == [
+            ("report.csv", b"a,b\n1,2\n")
+        ]
+

@@ -25,7 +25,7 @@ from app.services.sandbox.protocol import (
     classify,
     send_request,
 )
-from app.services.sandbox.session import SandboxSession
+from app.services.sandbox.session import ExecResult, GeneratedFile, SandboxSession
 
 __all__ = [
     "BackendFactory",
@@ -33,6 +33,8 @@ __all__ = [
     "DockerBackend",
     "ErrorInfo",
     "ErrorKind",
+    "ExecResult",
+    "GeneratedFile",
     "IsolationBackend",
     "JobRequest",
     "KERNEL_PATH",

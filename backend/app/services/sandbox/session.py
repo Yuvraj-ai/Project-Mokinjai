@@ -13,12 +13,15 @@ the event loop.
 """
 
 import atexit
+import base64
 import os
 import shutil
 import tempfile
 import threading
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from app.logging import logger
 from app.services.sandbox.backends import (
@@ -27,7 +30,37 @@ from app.services.sandbox.backends import (
     SandboxConfig,
     select_backend,
 )
-from app.services.sandbox.errors import ErrorKind, SandboxError
+from app.services.sandbox.errors import ErrorInfo, ErrorKind, SandboxError
+from app.services.sandbox.protocol import JobRequest, KernelResponse, classify
+
+
+@dataclass(frozen=True)
+class GeneratedFile:
+    """A file a job wrote. Contents, not a name and not a storage key.
+
+    The sandbox does not know about object storage (ADR-011 is a separate service), so
+    returning contents is what keeps this interface closed. The caller decides whether a
+    file is text to index, a blob to store, or a download. The cost is that a call can
+    put up to the output tmpfs — 64MB — into the caller's memory.
+    """
+
+    name: str
+    size: int
+    data: bytes
+
+
+@dataclass(frozen=True)
+class ExecResult:
+    """The outcome of `execute_python`.
+
+    `stderr` is the code's own error stream; `error` is the sandbox's verdict. A job
+    that logs a warning and exits cleanly has a non-empty `stderr` and `error is None`.
+    """
+
+    stdout: str
+    stderr: str
+    error: ErrorInfo | None
+    generated_files: list[GeneratedFile] = field(default_factory=list)
 
 
 class SandboxSession:
@@ -45,6 +78,7 @@ class SandboxSession:
         self._run_id = run_id or uuid.uuid4().hex[:12]
         self._backend: IsolationBackend | None = None
         self._host_root: Path | None = None
+        self._spec: ContainerSpec | None = None
         self._started = False
         self._closed = False
         self._lock = threading.Lock()
@@ -58,6 +92,22 @@ class SandboxSession:
     @property
     def started(self) -> bool:
         return self._started and not self._closed
+
+    @property
+    def output_dir(self) -> Path | None:
+        """The host directory this run's generated files are collected into.
+
+        Exposed for tests and for a caller that wants to watch a long run. The correct
+        way to read a run's output is `ExecResult.generated_files`; on the subprocess
+        backend this path is also the sandbox's, and inside a container it is not.
+        """
+        if self._closed:
+            return None
+        if not self._started:
+            self.start()
+        if self._spec is None:
+            return None
+        return Path(self._spec.host_output_dir)
 
     def start(self) -> None:
         """Create the isolation and boot the kernel. Idempotent.
@@ -93,6 +143,7 @@ class SandboxSession:
                 if self._host_root is not None:
                     shutil.rmtree(self._host_root, ignore_errors=True)
                     self._host_root = None
+                self._spec = None
 
     def __enter__(self) -> "SandboxSession":
         return self
@@ -124,6 +175,7 @@ class SandboxSession:
                 _copy_tree(self._data_dir, data_dir)
 
             spec: ContainerSpec = self._config.container_spec(run_id=self._run_id, host_root=str(self._host_root))
+            self._spec = spec
             backend = select_backend(self._config)(spec)
             self._backend = backend
             backend.start()
@@ -131,6 +183,7 @@ class SandboxSession:
             if self._host_root is not None:
                 shutil.rmtree(self._host_root, ignore_errors=True)
                 self._host_root = None
+            self._spec = None
             self._backend = None
             raise
         self._started = True
@@ -138,6 +191,68 @@ class SandboxSession:
         # close() still leaves nothing to the sweep.
         atexit.register(self.close)
         logger.info(f"Sandbox for run {self._run_id} started on the {backend.name} backend")
+
+    def _dispatch(self, request: JobRequest) -> tuple[KernelResponse | None, ErrorInfo | None]:
+        """Run one job, with the sandbox's own failures converted into a result's error.
+
+        Never raises for a sandbox failure. The kinds decidable on the host — a missing
+        image, an unreachable daemon, a closed session — all have to reach the caller
+        the same way a code error does, or the agent loop would need an exception
+        handler around every call.
+        """
+        try:
+            self._start()
+        except SandboxError as exc:
+            return None, exc.info
+        if self._backend is None:      # pragma: no cover - guarded by _start
+            return None, ErrorInfo(ErrorKind.CONTAINER_ERROR.value, "The sandbox is not available.")
+        try:
+            response = self._backend.run(
+                request, request.timeout + self._config.kernel_grace_seconds
+            )
+        except SandboxError as exc:
+            return None, exc.info
+        return response, classify(response)
+
+    def _collect_outputs(self) -> list[GeneratedFile]:
+        if self._backend is None:
+            return []
+        try:
+            collected = self._backend.collect_outputs()
+        except SandboxError:
+            return []
+        return [GeneratedFile(name=name, size=len(data), data=data) for name, data in collected]
+
+    # -- execution ---------------------------------------------------------- #
+
+    def execute_python(
+        self,
+        code: str,
+        files: dict[str, bytes] | None = None,
+        timeout: float | None = None,
+    ) -> ExecResult:
+        """Run Python in the run's sandbox and return what it produced.
+
+        `files` are per-call inputs, given as bytes and written into the writable work
+        directory before the code runs. Per call because they are small and ad-hoc; the
+        run's knowledge-base files are handed to the constructor instead and mounted
+        read-only, so they are not sent again on every call.
+        """
+        request = JobRequest(
+            kind="python",
+            code=code,
+            inputs=_encode_inputs(files) if files else {},
+            timeout=float(timeout or self._config.timeout_seconds),
+        )
+        with self._lock:
+            response, error = self._dispatch(request)
+            generated = self._collect_outputs()
+        return ExecResult(
+            stdout=response.stdout if response else "",
+            stderr=response.stderr if response else "",
+            error=error,
+            generated_files=generated,
+        )
 
 
 def _copy_tree(source: Path, target: Path) -> None:
@@ -148,3 +263,13 @@ def _copy_tree(source: Path, target: Path) -> None:
         destination = target / entry.relative_to(source)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(entry, destination)
+
+
+def _encode_inputs(files: dict[str, bytes]) -> dict[str, str]:
+    """Per-call inputs, base64'd for the wire, with names that cannot escape."""
+    for name, data in files.items():
+        if not name or os.path.isabs(name) or ".." in name.split("/"):
+            raise ValueError(f"{name!r} must be a relative path inside the sandbox")
+        if not isinstance(data, bytes):
+            raise TypeError(f"the contents of {name!r} must be bytes, not {type(data).__name__}")
+    return {name: base64.b64encode(data).decode("ascii") for name, data in files.items()}
