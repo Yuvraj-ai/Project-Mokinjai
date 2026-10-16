@@ -271,17 +271,17 @@ def _docker_ready() -> bool:
             text=True,
             timeout=15,
         )
+        if probe.returncode != 0:
+            return False
+        image = subprocess.run(
+            ["docker", "image", "inspect", SANDBOX_IMAGE],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return image.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
-    if probe.returncode != 0:
-        return False
-    image = subprocess.run(
-        ["docker", "image", "inspect", SANDBOX_IMAGE],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    return image.returncode == 0
 
 
 @pytest.fixture(scope="session")
