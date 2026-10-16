@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
+import subprocess
 
+import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
 from httpx import AsyncClient, ASGITransport
@@ -233,3 +235,73 @@ async def test_workflow(db_session, test_workspace, test_user):
     await db_session.commit()
     await db_session.refresh(workflow)
     return workflow
+
+
+# --------------------------------------------------------------------------- #
+# The Docker sandbox
+# --------------------------------------------------------------------------- #
+
+# Docker-marked tests are opt-in and gated. A process started before the `docker`
+# group was added cannot reach /var/run/docker.sock — a plain `docker version` prints
+# `permission denied while trying to connect to the docker API at
+# unix:///var/run/docker.sock` — so an ungated docker-marked test would FAIL rather
+# than skip, and a suite that fails for environmental reasons teaches people to ignore
+# it. To run them, go through the group:
+#
+#     newgrp docker -c "cd backend && ./venv/bin/python -m pytest unit_tests/ -q -m docker"
+#
+# `sg` is not installed here and `setpriv --groups` fails; `newgrp` is the bridge, and
+# a restarted session picks the group up.
+SANDBOX_DOCKER_ENV = "MOKINJAY_SANDBOX_DOCKER"
+SANDBOX_IMAGE = "mokinjay-sandbox:1"
+
+
+def _docker_ready() -> bool:
+    """Whether a container can actually be started right now.
+
+    Requires the opt-in variable so an accidental `docker` on PATH — or a socket that
+    happens to be reachable — does not silently change what the suite runs.
+    """
+    if os.getenv(SANDBOX_DOCKER_ENV) != "1":
+        return False
+    try:
+        probe = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if probe.returncode != 0:
+        return False
+    image = subprocess.run(
+        ["docker", "image", "inspect", SANDBOX_IMAGE],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    return image.returncode == 0
+
+
+@pytest.fixture(scope="session")
+def docker_available() -> bool:
+    """True when the socket is reachable and the sandbox image is built."""
+    return _docker_ready()
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip docker-marked tests rather than let them fail, when Docker is not usable."""
+    if _docker_ready():
+        return
+    skip = pytest.mark.skip(
+        reason=(
+            "needs a reachable Docker socket and the mokinjay-sandbox:1 image; "
+            f"set {SANDBOX_DOCKER_ENV}=1 and run the suite through the docker group "
+            '(newgrp docker -c "…") to enable'
+        )
+    )
+    for item in items:
+        if "docker" in item.keywords:
+            item.add_marker(skip)
+
