@@ -6,6 +6,7 @@ second database to be tested.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -227,3 +228,18 @@ def test_summary_cannot_contain_the_password():
     assert "w1" in text
     assert "localhost" in text
     assert "mokinjay" in text
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def test_create_user_script_does_not_build_schema():
+    """It must not build a schema outside Alembic (ADR-022).
+
+    Asserted against the source, in the style ``test_secret_scripts.py`` already
+    uses for script-level invariants: this is a property of the file, not of any
+    function's behaviour, so there is nothing to call.
+    """
+    source = (BACKEND_DIR / "create_user.py").read_text()
+    assert "create_all" not in source
+    assert "assert_schema_present" in source
