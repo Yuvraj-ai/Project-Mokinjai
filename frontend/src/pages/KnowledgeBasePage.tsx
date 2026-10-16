@@ -266,11 +266,12 @@ export default function KnowledgeBasePage() {
               <input
                 ref={fileInput}
                 type="file"
+                disabled={busy}
                 onChange={(event) => {
                   const file = event.target.files?.[0]
                   if (file) sendFile(file)
                 }}
-                className="text-sm text-ink-500"
+                className="text-sm text-ink-500 disabled:opacity-50"
               />
               <span className="flex items-center gap-1 text-xs text-ink-400">
                 <Upload className="w-3 h-3" /> 25 MB max; text, markdown, CSV, JSON, PDF, DOCX, XLSX
@@ -295,15 +296,17 @@ export default function KnowledgeBasePage() {
                     <tr key={doc.id} className="border-t border-ink-100/60">
                       <td className="py-2 text-ink-900">
                         <button
-                          onClick={() =>
-                            workspaceId &&
+                          onClick={() => {
+                            if (!workspaceId) return
                             downloadDocument(
                               workspaceId,
                               doc.knowledge_base_id,
                               doc.id,
                               doc.filename ?? doc.id
+                            ).catch((caught) =>
+                              report(caught, 'Could not download the document')
                             )
-                          }
+                          }}
                           className="underline decoration-ink-200"
                         >
                           {doc.filename ?? doc.id}

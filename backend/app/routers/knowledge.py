@@ -41,8 +41,6 @@ router = APIRouter()
 # constraint so widening it later needs no migration.
 SUPPORTED_KNOWLEDGE_BASE_TYPES = ("document",)
 
-settings = get_settings()
-
 # Extraction's input contract, declared here so an unsupported file is refused at upload
 # rather than discovered in Phase 2. These are the types memory.md's sandbox libraries
 # (pypdf, python-docx, openpyxl, pandas) can read. PPTX is deferred (PROJECT_STATUS.md).
@@ -274,13 +272,14 @@ async def upload_document(
         )
 
     payload = bytearray()
+    max_upload_bytes = get_settings().STORAGE_MAX_UPLOAD_BYTES
     while True:
         chunk = await file.read(UPLOAD_CHUNK_BYTES)
         if not chunk:
             break
-        if len(payload) + len(chunk) > settings.STORAGE_MAX_UPLOAD_BYTES:
+        if len(payload) + len(chunk) > max_upload_bytes:
             raise PayloadTooLargeException(
-                f"File exceeds the {settings.STORAGE_MAX_UPLOAD_BYTES} byte limit"
+                f"File exceeds the {max_upload_bytes} byte limit"
             )
         payload.extend(chunk)
 
