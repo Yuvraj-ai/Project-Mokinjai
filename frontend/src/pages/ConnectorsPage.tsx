@@ -328,7 +328,7 @@ export default function ConnectorsPage() {
                   <button
                     onClick={() => void handleTest(connector)}
                     disabled={busyId === connector.id}
-                    title="Test connection"
+                    title={connector.last_tested_at ? 'Re-test connection' : 'Test connection'}
                     className="text-ink-400 hover:text-ink-800 dark:hover:text-cream-100 disabled:opacity-40"
                   >
                     <RefreshCw

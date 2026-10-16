@@ -87,11 +87,16 @@ def connection_for(instance: ConnectorInstance) -> dict[str, Any]:
             f"{instance.connector_type!r} is no longer in the connector catalog; "
             "restore the catalog entry or delete this connector"
         )
-    secret = (
-        decrypt_api_key(instance.auth_encrypted)
-        if instance.auth_encrypted is not None
-        else None
-    )
+    try:
+        secret = (
+            decrypt_api_key(instance.auth_encrypted)
+            if instance.auth_encrypted is not None
+            else None
+        )
+    except Exception as exc:
+        raise ConnectorProbeError(
+            "Stored credentials could not be decrypted (encryption key mismatch or corrupted secret)"
+        ) from exc
     return server_config(entry, secret, dict(instance.config or {}))
 
 

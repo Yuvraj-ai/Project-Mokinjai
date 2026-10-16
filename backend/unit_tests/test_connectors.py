@@ -251,6 +251,14 @@ def test_connection_for_refuses_a_type_that_left_the_catalog(encryption_key):
         connection_for(_instance("retired-connector", secret="whatever"))
 
 
+def test_connection_for_handles_decryption_failure(encryption_key):
+    instance = _instance("github", secret="ghp-token")
+    instance.auth_encrypted = b"corrupted-non-fernet-token"
+    with pytest.raises(ConnectorProbeError, match="could not be decrypted"):
+        connection_for(instance)
+
+
+
 def test_connections_for_keys_by_instance_id(encryption_key):
     first = _instance("github", secret="ghp-token")
     second = _instance("filesystem", config={"path": "/tmp/scratch"})
@@ -728,9 +736,14 @@ async def test_a_viewer_cannot_update_or_delete(
         f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
         headers=viewer_headers,
     )
+    tested = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}/test",
+        headers=viewer_headers,
+    )
 
     assert updated.status_code == 403, updated.text
     assert deleted.status_code == 403, deleted.text
+    assert tested.status_code == 403, tested.text
 
 
 from pathlib import Path
