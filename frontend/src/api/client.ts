@@ -1,10 +1,11 @@
 import axios from 'axios'
 
+// No Content-Type here on purpose. Axios sets `application/json` itself for an object
+// body, while a FormData body must be left alone so the browser can add the multipart
+// boundary — and a hand-set `multipart/form-data` without a boundary makes the request
+// body unparseable on the server, which is exactly the bug this omission prevents.
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 apiClient.interceptors.request.use((config) => {
