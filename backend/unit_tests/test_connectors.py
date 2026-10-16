@@ -150,3 +150,116 @@ async def test_connector_instance_round_trips_with_its_defaults(db_session, test
     assert found.created_at is not None, "created_at should come from the server default"
     assert found.updated_at is not None, "updated_at should come from the server default"
 
+
+import pytest
+from cryptography.fernet import Fernet
+
+from app.config import get_settings
+from app.models.connector import ConnectorInstance
+from app.services.connector_catalog import get_entry
+from app.services.connector_runtime import (
+    ConnectorProbeError,
+    connection_for,
+    connections_for,
+    server_config,
+    slug,
+)
+
+
+@pytest.fixture
+def encryption_key():
+    """A throwaway Fernet key for the duration of one test.
+
+    Mirrors the fixture in `test_llm_profiles.py`. It stays here rather than moving to
+    conftest because moving it would mean editing a passing file for no functional gain.
+    """
+    settings = get_settings()
+    previous = getattr(settings, "LLM_ENCRYPTION_KEY", "")
+    settings.LLM_ENCRYPTION_KEY = Fernet.generate_key().decode()
+    yield settings.LLM_ENCRYPTION_KEY
+    settings.LLM_ENCRYPTION_KEY = previous
+
+
+def _instance(connector_type: str, *, secret: str | None = None, config: dict | None = None):
+    """A row that was never committed — `connection_for` reads it, never queries it."""
+    from app.crypto import encrypt_api_key
+
+    return ConnectorInstance(
+        id="11111111-1111-1111-1111-111111111111",
+        workspace_id="22222222-2222-2222-2222-222222222222",
+        connector_type=connector_type,
+        name="Test connector",
+        status="pending",
+        auth_scope="workspace",
+        auth_encrypted=encrypt_api_key(secret) if secret else None,
+        config=config or {},
+        tool_names=[],
+    )
+
+
+def test_slug_is_lowercase_and_tool_name_safe():
+    assert slug("My GitHub") == "my_github"
+    assert slug("Everything (test server)") == "everything_test_server"
+    assert slug("  ---  ") == "connector", "an empty slug would produce a bare underscore"
+
+
+def test_a_url_entry_builds_a_bearer_header():
+    connection = server_config(get_entry("github"), "ghp-token", {})
+    assert connection == {
+        "transport": "streamable_http",
+        "url": "https://api.githubcopilot.com/mcp/",
+        "headers": {"Authorization": "Bearer ghp-token"},
+    }
+
+
+def test_a_url_entry_refuses_a_blank_secret():
+    with pytest.raises(ConnectorProbeError, match="required"):
+        server_config(get_entry("github"), "", {})
+
+
+def test_an_stdio_entry_interpolates_a_config_value():
+    connection = server_config(get_entry("filesystem"), None, {"path": "/tmp/scratch"})
+    assert connection["transport"] == "stdio"
+    assert connection["command"] == "npx"
+    assert connection["args"][-1] == "/tmp/scratch"
+
+
+def test_an_stdio_entry_names_the_value_it_is_missing():
+    with pytest.raises(ConnectorProbeError, match="path"):
+        server_config(get_entry("filesystem"), None, {})
+
+
+def test_a_connection_string_entry_interpolates_the_secret():
+    uri = "postgresql://user:pw@localhost:5432/analytics"
+    connection = server_config(get_entry("postgres"), uri, {"database": "analytics"})
+    assert connection["args"][-1] == uri
+
+
+def test_connection_for_decrypts_the_stored_secret(encryption_key):
+    connection = connection_for(_instance("github", secret="ghp-token"))
+    assert connection["headers"]["Authorization"] == "Bearer ghp-token"
+
+
+def test_connection_for_handles_an_entry_that_takes_no_secret(encryption_key):
+    connection = connection_for(_instance("filesystem", config={"path": "/tmp/scratch"}))
+    assert connection["args"][-1] == "/tmp/scratch"
+    assert "headers" not in connection
+
+
+def test_connection_for_refuses_a_type_that_left_the_catalog(encryption_key):
+    with pytest.raises(ConnectorProbeError, match="no longer in the connector catalog"):
+        connection_for(_instance("retired-connector", secret="whatever"))
+
+
+def test_connections_for_keys_by_instance_id(encryption_key):
+    first = _instance("github", secret="ghp-token")
+    second = _instance("filesystem", config={"path": "/tmp/scratch"})
+    second.id = "33333333-3333-3333-3333-333333333333"
+
+    connections = connections_for([first, second])
+
+    assert set(connections) == {first.id, second.id}
+    assert connections[first.id]["transport"] == "streamable_http"
+    assert connections[second.id]["transport"] == "stdio"
+
+
