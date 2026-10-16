@@ -176,3 +176,108 @@ def extract_references(content: str) -> SkillReferences:
         bucket = skills if match.kind == "skill" else tools
         bucket.setdefault(match.name.lower(), match.name)
     return SkillReferences(skill_refs=list(skills.values()), tool_refs=list(tools.values()))
+
+
+# --------------------------------------------------------------------------- #
+# Validation
+# --------------------------------------------------------------------------- #
+
+
+def validate_skill(
+    definition: SkillDefinition,
+    workspace_skills: Mapping[str, SkillDefinition],
+    known_tools: Iterable[str],
+) -> None:
+    """Raise `SkillError` unless the skill can be saved.
+
+    Unresolved `@` and `/` references, cycles and a self-reference are all caught
+    here. `workspace_skills` is every skill in the workspace keyed by name, so
+    the graph is walked without this module reading a row: callers reduce rows to
+    `SkillDefinition`s, and tests build them directly.
+    """
+    if not definition.name.strip():
+        raise SkillError("A skill needs a name.")
+    if not definition.description.strip():
+        raise SkillError(
+            f"'{definition.name}' needs a description. It is the menu line the model sees."
+        )
+    if not definition.content.strip():
+        raise SkillError(f"'{definition.name}' has no content.")
+
+    _reachable(definition, workspace_skills)
+
+    tools = {name.lower() for name in known_tools}
+    for name in extract_references(definition.content).tool_refs:
+        if name.lower() not in tools:
+            raise SkillError(
+                f"'{definition.name}' references the tool '{name}', which is not a tool "
+                "in this workspace. Add the tool first, then reference it."
+            )
+
+
+def _lookup(name: str, workspace_skills: Mapping[str, SkillDefinition]) -> SkillDefinition:
+    wanted = name.lower()
+    for key, definition in workspace_skills.items():
+        if key.lower() == wanted:
+            return definition
+    raise SkillError(
+        f"'{name}' is not a skill in this workspace, so it cannot be referenced."
+    )
+
+
+def _reachable(
+    root: SkillDefinition, workspace_skills: Mapping[str, SkillDefinition]
+) -> list[SkillDefinition]:
+    """Walk forward from `root`, collecting the transitive `@` closure.
+
+    Reaching a skill that is already on the current path is a cycle, and the
+    error names the path so the user can see the loop they built. A self-reference
+    is the degenerate case of the same walk, so it needs no special case.
+    """
+    collected: dict[str, SkillDefinition] = {}
+
+    def walk(definition: SkillDefinition, path: list[str]) -> None:
+        for name in extract_references(definition.content).skill_refs:
+            target = _lookup(name, workspace_skills)
+            if target.name in path:
+                raise SkillError("Circular reference: " + " → ".join([*path, target.name]))
+            if target.name in collected:
+                continue
+            collected[target.name] = target
+            walk(target, [*path, target.name])
+
+    walk(root, [root.name])
+    collected.pop(root.name, None)
+    return list(collected.values())
+
+
+def find_skill_referrers(
+    name: str, workspace_skills: Mapping[str, SkillDefinition]
+) -> list[str]:
+    """Names of every skill whose content references `name` with an `@`."""
+    wanted = name.lower()
+    return sorted(
+        other.name
+        for other in workspace_skills.values()
+        if any(ref.lower() == wanted for ref in extract_references(other.content).skill_refs)
+    )
+
+
+def rewrite_skill_references(content: str, old_name: str, new_name: str) -> str:
+    """Point every `@old_name` at `@new_name`. ADR-019: references are by name.
+
+    Rewrites only what the scanner recognises as a reference, so an `@old_name`
+    inside a code fence — an example, not a reference — is left exactly as the
+    author wrote it.
+    """
+    wanted = old_name.lower()
+    pieces: list[str] = []
+    cursor = 0
+    for match in _scan(content):
+        if match.kind != "skill" or match.name.lower() != wanted:
+            continue
+        pieces.append(content[cursor : match.start])
+        pieces.append(f"@{new_name}")
+        cursor = match.end
+    pieces.append(content[cursor:])
+    return "".join(pieces)

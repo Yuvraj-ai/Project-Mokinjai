@@ -15,6 +15,9 @@ from app.services.skill import (
     SkillError,
     SkillReferences,
     extract_references,
+    find_skill_referrers,
+    rewrite_skill_references,
+    validate_skill,
 )
 
 
@@ -113,3 +116,153 @@ class TestCodeIsSkipped:
 
     def test_an_unterminated_inline_span_runs_to_the_end_of_the_line(self):
         assert extract_references("`@Ghost and @Writer\n@Real").skill_refs == ["Real"]
+
+
+class TestValidation:
+    def test_a_valid_skill_passes(self):
+        writer = skill("Writer", content="Follow @Step. Call /SearchWeb.")
+
+        validate_skill(writer, defs(skill("Step"), writer), known_tools=["SearchWeb"])
+
+    def test_an_unresolved_skill_reference_is_rejected(self):
+        writer = skill("Writer", content="Use @Ghost.")
+
+        with pytest.raises(SkillError) as excinfo:
+            validate_skill(writer, defs(writer), known_tools=[])
+
+        assert "Ghost" in str(excinfo.value)
+
+    def test_an_unresolved_tool_reference_is_rejected(self):
+        writer = skill("Writer", content="Call /SearchWeb.")
+
+        with pytest.raises(SkillError) as excinfo:
+            validate_skill(writer, defs(writer), known_tools=["Other"])
+
+        assert "SearchWeb" in str(excinfo.value)
+        assert "Writer" in str(excinfo.value)
+
+    def test_a_resolved_tool_reference_passes_case_insensitively(self):
+        writer = skill("Writer", content="Call /SearchWeb.")
+
+        validate_skill(writer, defs(writer), known_tools=["searchweb"])
+
+    def test_a_sub_skill_reference_resolves_case_insensitively(self):
+        writer = skill("Writer", content="Follow @step.")
+
+        validate_skill(writer, defs(skill("Step"), writer), known_tools=[])
+
+    def test_a_missing_description_is_rejected(self):
+        writer = skill("Writer", description="   ")
+
+        with pytest.raises(SkillError) as excinfo:
+            validate_skill(writer, defs(writer), known_tools=[])
+
+        assert "Writer" in str(excinfo.value)
+
+    def test_empty_content_is_rejected(self):
+        writer = skill("Writer", content="")
+
+        with pytest.raises(SkillError):
+            validate_skill(writer, defs(writer), known_tools=[])
+
+    def test_a_fenced_example_is_not_validated(self):
+        writer = skill("Writer", content="An example:\n\n```\n@Ghost and /GhostTool\n```\n")
+
+        validate_skill(writer, defs(writer), known_tools=[])
+
+
+class TestCycles:
+    def test_a_self_reference_is_a_cycle(self):
+        loop = skill("Loop", content="Then read @Loop.")
+
+        with pytest.raises(SkillError) as excinfo:
+            validate_skill(loop, defs(loop), known_tools=[])
+
+        assert str(excinfo.value) == "Circular reference: Loop → Loop"
+
+    def test_a_mutual_cycle_names_the_path(self):
+        alpha = skill("Alpha", content="Then @Beta.")
+        beta = skill("Beta", content="Then @Alpha.")
+
+        with pytest.raises(SkillError) as excinfo:
+            validate_skill(alpha, defs(alpha, beta), known_tools=[])
+
+        assert str(excinfo.value) == "Circular reference: Alpha → Beta → Alpha"
+
+    def test_a_longer_cycle_is_detected(self):
+        a = skill("A", content="@B")
+        b = skill("B", content="@C")
+        c = skill("C", content="@A")
+
+        with pytest.raises(SkillError):
+            validate_skill(a, defs(a, b, c), known_tools=[])
+
+    def test_a_cycle_through_a_sub_skill_is_detected(self):
+        root = skill("Root", content="@Mid")
+        mid = skill("Mid", content="@Root")
+
+        with pytest.raises(SkillError) as excinfo:
+            validate_skill(root, defs(root, mid), known_tools=[])
+
+        assert "Root" in str(excinfo.value) and "→" in str(excinfo.value)
+
+    def test_a_diamond_is_not_a_cycle(self):
+        unit = skill("Unit")
+        left = skill("Left", content="@Unit")
+        right = skill("Right", content="@Unit")
+        root = skill("Root", content="@Left and @Right")
+
+        validate_skill(root, defs(unit, left, right, root), known_tools=[])
+
+
+class TestReferrers:
+    def test_returns_every_direct_referrer(self):
+        step = skill("Step")
+        alpha = skill("Alpha", content="@Step")
+        beta = skill("Beta", content="and @Step.")
+        other = skill("Other", content="nothing here")
+
+        assert find_skill_referrers("Step", defs(step, alpha, beta, other)) == ["Alpha", "Beta"]
+
+    def test_matches_case_insensitively(self):
+        step = skill("Step")
+        alpha = skill("Alpha", content="@step")
+
+        assert find_skill_referrers("STEP", defs(step, alpha)) == ["Alpha"]
+
+    def test_returns_nothing_when_unreferenced(self):
+        assert find_skill_referrers("Lonely", defs(skill("Lonely"))) == []
+
+
+class TestRename:
+    def test_rewrites_a_reference_keeping_the_marker(self):
+        content = "Use @Step then @Step again."
+
+        assert rewrite_skill_references(content, "Step", "SolutionStep") == (
+            "Use @SolutionStep then @SolutionStep again."
+        )
+
+    def test_rewrites_case_insensitively(self):
+        assert rewrite_skill_references("see @step", "Step", "SolutionStep") == "see @SolutionStep"
+
+    def test_leaves_a_fenced_example_alone(self):
+        content = "Use @Step.\n\n```\n@Step inside code\n```\n"
+
+        assert rewrite_skill_references(content, "Step", "SolutionStep") == (
+            "Use @SolutionStep.\n\n```\n@Step inside code\n```\n"
+        )
+
+    def test_leaves_an_inline_code_span_alone(self):
+        content = "Use @Step, or write `@Step` in code."
+
+        assert rewrite_skill_references(content, "Step", "SolutionStep") == (
+            "Use @SolutionStep, or write `@Step` in code."
+        )
+
+    def test_leaves_tool_references_alone(self):
+        assert rewrite_skill_references("@Step uses /Step", "Step", "SolutionStep") == (
+            "@SolutionStep uses /Step"
+        )
+
+    def test_touches_nothing_when_there_is_no_reference(self):
+        assert rewrite_skill_references("plain text", "Step", "SolutionStep") == "plain text"
