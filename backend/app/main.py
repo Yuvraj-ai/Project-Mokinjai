@@ -15,6 +15,7 @@ from app.routers import (
     structured_outputs,
     skills,
     tools,
+    external_databases,
 )
 from app.websocket.execution_ws import execution_websocket
 from app.services.otp_store import otp_store
@@ -105,6 +106,11 @@ app.include_router(
     skills.router,
     prefix="/api/workspaces/{workspace_id}/skills",
     tags=["skills"],
+)
+app.include_router(
+    external_databases.router,
+    prefix="/api/workspaces/{workspace_id}/external-databases",
+    tags=["external-databases"],
 )
 
 
