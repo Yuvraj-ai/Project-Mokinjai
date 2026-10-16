@@ -527,4 +527,211 @@ async def test_a_viewer_can_read_the_list(client, viewer_headers, test_workspace
     assert response.status_code == 200, response.text
 
 
+async def _created(client, workspace_id, headers, **overrides):
+    response = await client.post(
+        f"/api/workspaces/{workspace_id}/connectors",
+        json=_body(**overrides),
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def test_update_with_a_blank_secret_keeps_the_ciphertext(
+    client, auth_headers, test_workspace, encryption_key, service_session
+):
+    """The established LLM-profile rule: blank means unchanged."""
+    created = await _created(client, test_workspace.id, auth_headers)
+    before = (
+        await service_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == created["id"])
+        )
+    ).scalar_one()
+    ciphertext_before = before.auth_encrypted
+
+    response = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        json={"name": "GitHub (renamed)", "auth_secret": "", "config": {}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["has_auth"] is True
+
+    service_session.expire_all()
+    after = (
+        await service_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == created["id"])
+        )
+    ).scalar_one()
+    assert after.auth_encrypted == ciphertext_before
+
+
+async def test_a_new_secret_replaces_the_ciphertext_and_resets_the_status(
+    client, auth_headers, test_workspace, encryption_key, service_session
+):
+    created = await _created(client, test_workspace.id, auth_headers)
+
+    # Make it look verified, so the reset has something to undo.
+    row = (
+        await service_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == created["id"])
+        )
+    ).scalar_one()
+    row.status = "enabled"
+    row.tool_names = ["get_me"]
+    row.last_error = None
+    await service_session.commit()
+    ciphertext_before = row.auth_encrypted
+
+    response = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        json={"name": created["name"], "auth_secret": "ghp-a-new-token", "config": {}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "pending"
+    assert response.json()["tools"] == []
+
+    service_session.expire_all()
+    after = (
+        await service_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == created["id"])
+        )
+    ).scalar_one()
+    assert after.auth_encrypted != ciphertext_before
+
+
+async def test_a_changed_config_resets_the_status_even_with_a_blank_secret(
+    client, auth_headers, test_workspace, encryption_key, service_session
+):
+    created = await _created(
+        client,
+        test_workspace.id,
+        auth_headers,
+        connector_type="filesystem",
+        name="Scratch",
+        auth_secret="",
+        config={"path": "/tmp/one"},
+    )
+    row = (
+        await service_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == created["id"])
+        )
+    ).scalar_one()
+    row.status = "enabled"
+    row.tool_names = ["read_file"]
+    await service_session.commit()
+
+    response = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        json={"name": "Scratch", "auth_secret": "", "config": {"path": "/tmp/two"}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "pending"
+    assert response.json()["config"] == {"path": "/tmp/two"}
+
+
+async def test_a_rename_alone_keeps_the_status_and_tools(
+    client, auth_headers, test_workspace, encryption_key, service_session
+):
+    created = await _created(client, test_workspace.id, auth_headers)
+    row = (
+        await service_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == created["id"])
+        )
+    ).scalar_one()
+    row.status = "enabled"
+    row.tool_names = ["get_me"]
+    row.last_error = None
+    await service_session.commit()
+
+    response = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        json={"name": "GitHub (renamed)", "auth_secret": "", "config": {}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "enabled"
+    assert response.json()["tools"] == ["get_me"]
+
+
+async def test_update_rejects_a_duplicate_name(
+    client, auth_headers, test_workspace, encryption_key
+):
+    await _created(client, test_workspace.id, auth_headers, name="Primary")
+    second = await _created(client, test_workspace.id, auth_headers, name="Secondary")
+
+    response = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{second['id']}",
+        json={"name": "primary", "auth_secret": "", "config": {}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+
+
+async def test_update_accepts_an_unchanged_name(
+    client, auth_headers, test_workspace, encryption_key
+):
+    """The uniqueness check must exclude the row being updated, or a rename is impossible."""
+    created = await _created(client, test_workspace.id, auth_headers, name="GitHub")
+
+    response = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        json={"name": "GitHub", "auth_secret": "", "config": {}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+
+
+async def test_delete_removes_the_row(client, auth_headers, test_workspace, encryption_key):
+    created = await _created(client, test_workspace.id, auth_headers)
+
+    deleted = await client.delete(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        headers=auth_headers,
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"success": True}
+
+    gone = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}", headers=auth_headers
+    )
+    assert gone.status_code == 404
+
+
+async def test_delete_is_404_for_an_unknown_id(client, auth_headers, test_workspace):
+    response = await client.delete(
+        f"/api/workspaces/{test_workspace.id}/connectors/no-such-id", headers=auth_headers
+    )
+
+    assert response.status_code == 404
+
+
+async def test_a_viewer_cannot_update_or_delete(
+    client, auth_headers, viewer_headers, test_workspace, encryption_key
+):
+    created = await _created(client, test_workspace.id, auth_headers)
+
+    updated = await client.put(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        json={"name": "Renamed", "auth_secret": "", "config": {}},
+        headers=viewer_headers,
+    )
+    deleted = await client.delete(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}",
+        headers=viewer_headers,
+    )
+
+    assert updated.status_code == 403, updated.text
+    assert deleted.status_code == 403, deleted.text
+
+
+
 

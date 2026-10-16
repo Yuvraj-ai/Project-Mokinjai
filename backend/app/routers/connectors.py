@@ -14,6 +14,7 @@ from app.schemas.connector import (
     CatalogEntryResponse,
     CatalogResponse,
     ConnectorCreate,
+    ConnectorUpdate,
     ConnectorListResponse,
     ConnectorResponse,
 )
@@ -57,12 +58,12 @@ def _assert_config_is_complete(entry: CatalogEntry, config: dict) -> None:
             )
 
 
-def _assert_secret_matches(entry: CatalogEntry, secret: str) -> None:
+def _assert_secret_matches(entry: CatalogEntry, secret: str, *, is_update: bool = False) -> None:
     if entry.auth_type == "none":
         if secret:
             raise BadRequestException(f"{entry.display_name} does not take a secret.")
         return
-    if not secret:
+    if not secret and not is_update:
         raise BadRequestException(f"{entry.secret_label or 'A secret'} is required.")
 
 
@@ -218,3 +219,70 @@ async def get_connector(
 ):
     instance = await _load_instance(db, workspace_id, connector_id)
     return _to_response(instance)
+
+
+@router.put("/{connector_id}", response_model=ConnectorResponse)
+async def update_connector(
+    workspace_id: str,
+    connector_id: str,
+    request: ConnectorUpdate,
+    current_user: User = Depends(get_current_user),
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    instance = await _load_instance(db, workspace_id, connector_id)
+    entry = _entry_for(instance.connector_type)
+    _assert_supported(entry)
+
+    rows = await _load_rows(db, workspace_id)
+    _assert_name_is_free(rows, request.name, exclude_id=instance.id)
+
+    secret = request.auth_secret.strip()
+    _assert_secret_matches(entry, secret, is_update=True)
+    _assert_config_is_complete(entry, request.config)
+
+    # `status`, `tool_names` and `last_error` describe one (auth, config) pair, so a
+    # verified state that no longer matches what is stored is a claim the row cannot
+    # support. A blank secret leaves the ciphertext alone, and asking whether one was
+    # submitted is exact without decrypting anything: a new non-blank secret always
+    # yields new ciphertext, and a blank one leaves the existing bytes untouched.
+    changed = bool(secret) or dict(request.config) != dict(instance.config or {})
+
+    instance.name = request.name
+    if secret:
+        instance.auth_encrypted = encrypt_api_key(secret)
+    # Reassign rather than mutate: SQLAlchemy does not track JSONB in place.
+    instance.config = dict(request.config)
+    if changed:
+        instance.status = "pending"
+        instance.tool_names = []
+        instance.last_error = None
+        instance.last_tested_at = None
+
+    db.add(instance)
+    await db.commit()
+    await db.refresh(instance)
+    logger.info(f"Connector instance {instance.id} updated by user {current_user.id}")
+    return _to_response(instance)
+
+
+@router.delete("/{connector_id}")
+async def delete_connector(
+    workspace_id: str,
+    connector_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove the row.
+
+    A real delete, matching `llm_profiles` and `structured_outputs`. The argument the
+    other way is recorded in the spec: if Phase 3 resolves connector credentials by
+    joining live rows, this is what would turn a working agent into a failing one, and
+    the additive fix would be a `deleted_at` column plus a filter on every read.
+    """
+    instance = await _load_instance(db, workspace_id, connector_id)
+    await db.delete(instance)
+    await db.commit()
+    logger.info(f"Connector instance {instance.id} deleted")
+    return {"success": True}
+
