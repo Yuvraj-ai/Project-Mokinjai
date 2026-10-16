@@ -345,3 +345,52 @@ def _collect_files(root: str) -> list[tuple[str, bytes]]:
                 relative = os.path.relpath(full, root).replace(os.sep, "/")
                 collected.append((relative, handle.read()))
     return sorted(collected)
+
+
+BackendFactory = Callable[[ContainerSpec], IsolationBackend]
+
+
+def select_backend(config: SandboxConfig) -> BackendFactory:
+    """Choose the isolation backend, and refuse silently to run un-isolated.
+
+    Returns a factory rather than an instance because the container spec — and the host
+    directory tree it names — does not exist until a session actually starts.
+
+    `"docker"` raising rather than falling back is the point of the setting: a
+    deployment can require real isolation, and a silent downgrade to a backend that is
+    not an isolation boundary is exactly the failure that setting prevents.
+    """
+    # Imported here, not at module scope: `docker_backend` imports this module, so a
+    # top-level import back would be a cycle.
+    from app.services.sandbox.docker_backend import DockerBackend
+
+    if config.backend == "subprocess":
+        return lambda spec: SubprocessBackend(spec)
+
+    if config.backend == "docker":
+        if not docker_reachable(config.docker_bin):
+            raise SandboxError(
+                ErrorKind.BACKEND_UNAVAILABLE,
+                "SANDBOX_BACKEND is 'docker' but the Docker daemon is not reachable.",
+                "Run `docker version` to see the error. A process started before the "
+                "`docker` group was added reports `permission denied while trying to "
+                "connect to the docker API at unix:///var/run/docker.sock`; run the "
+                'command through the group, e.g. `newgrp docker -c "…"`, or start a new '
+                "session so the group is picked up.",
+            )
+        return lambda spec: DockerBackend(spec, docker_bin=config.docker_bin)
+
+    if config.backend != "auto":
+        raise SandboxError(
+            ErrorKind.BACKEND_UNAVAILABLE,
+            f"SANDBOX_BACKEND must be 'auto', 'docker' or 'subprocess'; got {config.backend!r}.",
+        )
+
+    if docker_reachable(config.docker_bin):
+        return lambda spec: DockerBackend(spec, docker_bin=config.docker_bin)
+    logger.warning(
+        "Docker is not reachable; the sandbox is using the subprocess fallback, which "
+        "is not an isolation boundary."
+    )
+    return lambda spec: SubprocessBackend(spec)
+

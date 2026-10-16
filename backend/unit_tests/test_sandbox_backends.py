@@ -6,6 +6,7 @@ machine where /var/run/docker.sock cannot be reached, which is this one.
 """
 
 import os
+from pathlib import Path
 import time
 
 import pytest
@@ -171,3 +172,55 @@ class TestSubprocessBackend:
             backend.run(JobRequest(kind="python", code="pass", timeout=5), timeout=10)
 
         assert caught.value.info.kind == ErrorKind.CONTAINER_ERROR.value
+
+
+class TestSelectBackend:
+    def test_auto_chooses_docker_when_the_probe_succeeds(self, monkeypatch):
+        from app.services.sandbox import backends
+
+        monkeypatch.setattr(backends, "docker_reachable", lambda *a, **k: True)
+
+        factory = backends.select_backend(SandboxConfig(backend="auto"))
+
+        assert factory(spec(Path("/tmp"))).name == "docker"
+
+    def test_auto_falls_back_when_the_probe_fails(self, monkeypatch):
+        from app.services.sandbox import backends
+
+        monkeypatch.setattr(backends, "docker_reachable", lambda *a, **k: False)
+
+        factory = backends.select_backend(SandboxConfig(backend="auto"))
+
+        assert factory(spec(Path("/tmp"))).name == "subprocess"
+
+    def test_docker_is_required_when_it_is_named(self, monkeypatch):
+        from app.services.sandbox import backends
+
+        monkeypatch.setattr(backends, "docker_reachable", lambda *a, **k: False)
+
+        with pytest.raises(SandboxError) as caught:
+            backends.select_backend(SandboxConfig(backend="docker"))
+
+        assert caught.value.info.kind == ErrorKind.BACKEND_UNAVAILABLE.value
+        assert "docker.sock" in caught.value.info.detail
+
+    def test_subprocess_never_probes_docker(self, monkeypatch):
+        from app.services.sandbox import backends
+
+        def explode(*args, **kwargs):
+            raise AssertionError("the subprocess backend must not probe Docker")
+
+        monkeypatch.setattr(backends, "docker_reachable", explode)
+
+        factory = backends.select_backend(SandboxConfig(backend="subprocess"))
+
+        assert factory(spec(Path("/tmp"))).name == "subprocess"
+
+    def test_an_unknown_backend_is_refused(self):
+        from app.services.sandbox import backends
+
+        with pytest.raises(SandboxError) as caught:
+            backends.select_backend(SandboxConfig(backend="sausages"))
+
+        assert caught.value.info.kind == ErrorKind.BACKEND_UNAVAILABLE.value
+

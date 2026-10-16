@@ -8,13 +8,16 @@ the sandbox is a service several features borrow — not a knowledge-base featur
 
 from app.services.sandbox.backends import (
     KERNEL_PATH,
+    BackendFactory,
     ContainerSpec,
     IsolationBackend,
     SandboxConfig,
     SubprocessBackend,
     docker_reachable,
     kernel_failure,
+    select_backend,
 )
+from app.services.sandbox.docker_backend import DockerBackend
 from app.services.sandbox.errors import ErrorInfo, ErrorKind, SandboxError
 from app.services.sandbox.protocol import (
     JobRequest,
@@ -24,12 +27,14 @@ from app.services.sandbox.protocol import (
 )
 
 __all__ = [
-    "KERNEL_PATH",
+    "BackendFactory",
     "ContainerSpec",
+    "DockerBackend",
     "ErrorInfo",
     "ErrorKind",
     "IsolationBackend",
     "JobRequest",
+    "KERNEL_PATH",
     "KernelResponse",
     "SandboxConfig",
     "SandboxError",
@@ -37,5 +42,6 @@ __all__ = [
     "classify",
     "docker_reachable",
     "kernel_failure",
+    "select_backend",
     "send_request",
 ]
