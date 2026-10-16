@@ -22,6 +22,7 @@ from pathlib import Path
 
 from app.logging import logger
 from app.services.sandbox.backends import (
+    ContainerSpec,
     IsolationBackend,
     SandboxConfig,
     select_backend,
@@ -81,15 +82,17 @@ class SandboxSession:
             self._closed = True
             atexit.unregister(self.close)
             backend, self._backend = self._backend, None
-            if backend is not None and self._started:
-                try:
-                    backend.stop()
-                except SandboxError as exc:
-                    logger.warning(f"Sandbox teardown failed for run {self._run_id}: {exc}")
-            self._started = False
-            if self._host_root is not None:
-                shutil.rmtree(self._host_root, ignore_errors=True)
-                self._host_root = None
+            try:
+                if backend is not None and self._started:
+                    try:
+                        backend.stop()
+                    except SandboxError as exc:
+                        logger.warning(f"Sandbox teardown failed for run {self._run_id}: {exc}")
+            finally:
+                self._started = False
+                if self._host_root is not None:
+                    shutil.rmtree(self._host_root, ignore_errors=True)
+                    self._host_root = None
 
     def __enter__(self) -> "SandboxSession":
         return self
@@ -108,25 +111,27 @@ class SandboxSession:
             )
 
         self._host_root = Path(tempfile.mkdtemp(prefix="mokinjay-sandbox-"))
-        os.makedirs(self._host_root / "ipc", exist_ok=True)
-        data_dir = self._host_root / "data"
-        os.makedirs(data_dir, exist_ok=True)
-        # The run's knowledge-base files are staged once and bind-mounted read-only, so
-        # a call addresses them by name instead of paying to send them through the
-        # socket on every call. The short /tmp root also keeps the Unix socket path
-        # under the 107-byte AF_UNIX limit, which a path under the project directory
-        # would not.
-        if self._data_dir is not None:
-            _copy_tree(self._data_dir, data_dir)
-
-        spec = self._config.container_spec(run_id=self._run_id, host_root=str(self._host_root))
-        backend = select_backend(self._config)(spec)
-        self._backend = backend
         try:
+            os.makedirs(self._host_root / "ipc", exist_ok=True)
+            data_dir = self._host_root / "data"
+            os.makedirs(data_dir, exist_ok=True)
+            # The run's knowledge-base files are staged once and bind-mounted read-only, so
+            # a call addresses them by name instead of paying to send them through the
+            # socket on every call. The short /tmp root also keeps the Unix socket path
+            # under the 107-byte AF_UNIX limit, which a path under the project directory
+            # would not.
+            if self._data_dir is not None:
+                _copy_tree(self._data_dir, data_dir)
+
+            spec: ContainerSpec = self._config.container_spec(run_id=self._run_id, host_root=str(self._host_root))
+            backend = select_backend(self._config)(spec)
+            self._backend = backend
             backend.start()
-        except SandboxError:
-            shutil.rmtree(self._host_root, ignore_errors=True)
-            self._host_root = None
+        except BaseException:
+            if self._host_root is not None:
+                shutil.rmtree(self._host_root, ignore_errors=True)
+                self._host_root = None
+            self._backend = None
             raise
         self._started = True
         # A clean interpreter exit closes the sandbox, so an embedder that forgets

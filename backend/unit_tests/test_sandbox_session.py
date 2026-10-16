@@ -10,7 +10,7 @@ import pytest
 
 from app.services.sandbox import session as session_module
 from app.services.sandbox.backends import SandboxConfig
-from app.services.sandbox.errors import SandboxError
+from app.services.sandbox.errors import ErrorKind, SandboxError
 from app.services.sandbox.session import SandboxSession
 
 
@@ -129,3 +129,42 @@ class TestTeardown:
 
         assert fake_backend.started == 1
         assert fake_backend.stopped == 1
+
+
+class TestFilesystemCleanup:
+    def test_host_root_is_removed_on_close(self, config, fake_backend):
+        session = SandboxSession(config=config)
+        session.start()
+        host_root = session._host_root
+        assert host_root is not None and host_root.exists()
+
+        session.close()
+
+        assert not host_root.exists()
+        assert session._host_root is None
+
+    def test_host_root_is_cleaned_up_if_start_fails(self, config, monkeypatch):
+        class BrokenBackend(FakeBackend):
+            def start(self):
+                raise SandboxError(ErrorKind.CONTAINER_ERROR, "failed to start")
+
+        monkeypatch.setattr(
+            session_module, "select_backend", lambda config: lambda spec: BrokenBackend()
+        )
+        session = SandboxSession(config=config)
+        with pytest.raises(SandboxError):
+            session.start()
+
+        assert session._host_root is None
+
+    def test_data_dir_files_are_copied_to_host_root(self, config, fake_backend, tmp_path):
+        data = tmp_path / "data_source"
+        data.mkdir()
+        (data / "sample.txt").write_text("content")
+
+        session = SandboxSession(config=config, data_dir=str(data))
+        session.start()
+        try:
+            assert (session._host_root / "data" / "sample.txt").read_text() == "content"
+        finally:
+            session.close()
