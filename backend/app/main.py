@@ -13,6 +13,7 @@ from app.routers import (
     prompts,
     llm_profiles,
     structured_outputs,
+    tools,
 )
 from app.websocket.execution_ws import execution_websocket
 from app.services.otp_store import otp_store
@@ -98,6 +99,7 @@ app.include_router(
     prefix="/api/workspaces/{workspace_id}/structured-outputs",
     tags=["structured-outputs"],
 )
+app.include_router(tools.router, prefix="/api/workspaces/{workspace_id}/tools", tags=["tools"])
 
 
 @app.get("/health")
