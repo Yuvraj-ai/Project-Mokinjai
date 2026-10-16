@@ -151,6 +151,47 @@ async def admin_headers(admin_user, db_session):
 
 
 @pytest_asyncio.fixture(scope="function")
+async def viewer_user(db_session):
+    """A non-superuser with no workspace membership of its own."""
+    user = User(
+        email="viewer@example.com",
+        hashed_password=hash_password("viewerpass123"),
+        name="Viewer User",
+        is_superuser=False,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def viewer_headers(viewer_user, test_workspace, db_session):
+    """A `viewer` in `test_workspace`.
+
+    Requesting this fixture also creates the workspace, so a test can ask for it and
+    `auth_headers` together and be sure both users see the same workspace.
+    """
+    from app.services.sessions import create_session
+
+    db_session.add(
+        WorkspaceMember(
+            workspace_id=test_workspace.id, user_id=viewer_user.id, role="viewer"
+        )
+    )
+    await db_session.commit()
+
+    session = await create_session(
+        db_session, user_id=viewer_user.id, refresh_token="fixture-viewer-refresh-token"
+    )
+    token = create_access_token(
+        {"sub": viewer_user.id, "email": viewer_user.email, "sid": session.id}
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+
+@pytest_asyncio.fixture(scope="function")
 async def test_workspace(db_session, test_user):
     workspace = Workspace(
         name="Test Workspace",
