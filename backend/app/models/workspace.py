@@ -25,6 +25,7 @@ class Workspace(Base):
     structured_outputs = relationship(
         "StructuredOutput", back_populates="workspace", cascade="all, delete-orphan"
     )
+    tools = relationship("Tool", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class WorkspaceMember(Base):

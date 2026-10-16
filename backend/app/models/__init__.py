@@ -8,6 +8,7 @@ from app.models.prompt import PromptTemplate
 from app.models.llm_profile import LlmProfile
 from app.models.structured_output import StructuredOutput
 from app.models.session import Session
+from app.models.tool import Tool
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "LlmProfile",
     "StructuredOutput",
     "Session",
+    "Tool",
 ]
