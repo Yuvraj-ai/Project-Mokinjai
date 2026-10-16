@@ -44,6 +44,78 @@ def _on_alarm(signum, frame):
     raise DeadlineExceeded("the job exceeded its time limit")
 
 
+class SandboxContext:
+    """The `ctx` injected as a user-defined tool's first argument.
+
+    Offline by construction, and that is the resolution of a contradiction in the
+    recorded design. The tool design said a tool body runs with a `ctx` giving it
+    database, HTTP and knowledge-base access; ADR-010 runs this container with
+    `--network none`, and there is no database and no object-storage credential inside
+    it. So `ctx` exposes exactly what the container can reach: the read-only
+    knowledge-base files under `data_dir`, and the writable output and work directories.
+
+    A tool that needs a database, an HTTP call or object storage calls a host-side tool
+    for it, where the credentials already live (ADR-020). The capability moves from
+    sandboxed code to trusted host code rather than being faked here, and there is
+    deliberately no `ctx.database`, `ctx.http` or `ctx.knowledge_base`: a surface that
+    does not exist cannot be reached by mistake.
+    """
+
+    def __init__(self, data_dir, output_dir, work_dir):
+        self.data_dir = data_dir
+        self.output_dir = output_dir
+        self.work_dir = work_dir
+
+    # -- the mounted knowledge base, read-only ------------------------------ #
+
+    def list_inputs(self):
+        """Names of the files mounted under the data directory, relative and sorted."""
+        found = []
+        for root, _directories, names in os.walk(self.data_dir):
+            for name in names:
+                full = os.path.join(root, name)
+                found.append(os.path.relpath(full, self.data_dir))
+        return sorted(found)
+
+    def input_path(self, name):
+        """The absolute path of a mounted file, for handing straight to pandas."""
+        return self._inside(self.data_dir, name)
+
+    def read_input(self, name):
+        with open(self.input_path(name), "rb") as handle:
+            return handle.read()
+
+    # -- writable paths ----------------------------------------------------- #
+
+    def write_output(self, name, data):
+        """Write into the output directory, which the caller collects. Returns the path."""
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        path = self._inside(self.output_dir, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(data)
+        return path
+
+    def work_file(self, name):
+        """A writable scratch path that survives between calls within the run."""
+        return self._inside(self.work_dir, name)
+
+    def log(self, message):
+        print(message)
+
+    @staticmethod
+    def _inside(root, name):
+        """Resolve `name` under `root`, refusing anything that climbs out of it."""
+        if not name or os.path.isabs(name):
+            raise ValueError(f"{name!r} must be a relative path inside the sandbox")
+        root = os.path.realpath(root)
+        path = os.path.realpath(os.path.join(root, name))
+        if path != root and not path.startswith(root + os.sep):
+            raise ValueError(f"{name!r} escapes the sandbox directory")
+        return path
+
+
 class Kernel:
     """Serves jobs over a Unix socket, holding one namespace for the run."""
 
@@ -128,12 +200,50 @@ class Kernel:
         kind = payload.get("kind")
         if kind == "python":
             return self._run_python(payload)
+        if kind == "tool":
+            return self._run_tool(payload)
         raise ValueError(f"unknown job kind {kind!r}")
 
     def _run_python(self, payload):
         code = compile(payload.get("code") or "", "<sandbox>", "exec")
         exec(code, self.namespace)
         return None
+
+    def _run_tool(self, payload):
+        """Run one user-defined tool, in a fresh namespace, with `ctx` injected.
+
+        A fresh namespace per call, unlike `_run_python`: a tool call must not depend on
+        what another tool call happened to leave behind. What a tool *writes* through
+        `ctx.write_output` or `ctx.work_file` does persist, and is the statefulness that
+        matters for a tool.
+        """
+        name = payload.get("tool_name") or ""
+        source = payload.get("tool_source") or ""
+        arguments = payload.get("tool_args") or {}
+
+        namespace = {"__name__": f"__tool_{name}__"}
+        context = SandboxContext(self.data_dir, self.output_dir, self.work_dir)
+        namespace["ctx"] = context
+        exec(compile(source, f"<tool:{name}>", "exec"), namespace)
+
+        function = namespace.get(name)
+        if not callable(function):
+            raise RuntimeError(
+                f"The source for tool '{name}' does not define a function of that name."
+            )
+
+        result = function(**arguments)
+        # The result has to cross the wire, so it has to be JSON. A DataFrame or a
+        # custom object is refused here, with the type named, rather than truncating the
+        # reply at the framing layer where the reason would be invisible.
+        try:
+            json.dumps(result)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"Tool '{name}' returned {type(result).__name__}, which cannot be sent back "
+                f"to the caller: tool results must be JSON-serialisable ({exc})."
+            ) from exc
+        return result
 
     @staticmethod
     def _failure(status, stdout, stderr, exc):

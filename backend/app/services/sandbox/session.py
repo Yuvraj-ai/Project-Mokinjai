@@ -14,6 +14,7 @@ the event loop.
 
 import atexit
 import base64
+import json
 import os
 import shutil
 import tempfile
@@ -32,6 +33,7 @@ from app.services.sandbox.backends import (
 )
 from app.services.sandbox.errors import ErrorInfo, ErrorKind, SandboxError
 from app.services.sandbox.protocol import JobRequest, KernelResponse, classify
+from app.services.sandbox.tools import ToolSource
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,22 @@ class ExecResult:
     generated_files: list[GeneratedFile] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ToolResult:
+    """The outcome of `execute_tool`.
+
+    `memory.md` records this shape as `{result, stdout, stderr, error}`; `generated_files`
+    is added, because output is cleared at the start of every job, so a tool's file would
+    otherwise be destroyed before any caller could read it.
+    """
+
+    result: Any
+    stdout: str
+    stderr: str
+    error: ErrorInfo | None
+    generated_files: list[GeneratedFile] = field(default_factory=list)
+
+
 class SandboxSession:
     """One run's sandbox. Holds no container until code needs one."""
 
@@ -71,10 +89,12 @@ class SandboxSession:
         *,
         config: SandboxConfig | None = None,
         data_dir: str | None = None,
+        tools: ToolSource | None = None,
         run_id: str | None = None,
     ):
         self._config = config or SandboxConfig.from_settings()
         self._data_dir = Path(data_dir) if data_dir else None
+        self._tools = tools
         self._run_id = run_id or uuid.uuid4().hex[:12]
         self._backend: IsolationBackend | None = None
         self._host_root: Path | None = None
@@ -248,6 +268,88 @@ class SandboxSession:
             response, error = self._dispatch(request)
             generated = self._collect_outputs()
         return ExecResult(
+            stdout=response.stdout if response else "",
+            stderr=response.stderr if response else "",
+            error=error,
+            generated_files=generated,
+        )
+
+    def execute_tool(
+        self,
+        name: str,
+        args: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> ToolResult:
+        """Run a user-defined tool in the run's sandbox.
+
+        `ctx` is bound as a name in the execution namespace, NOT as a parameter (tools
+        spec §7): that keeps "every parameter has a type hint" free of exceptions and
+        means the parameters an LLM sees are exactly the ones the user declared. `args`
+        fills the function's declared parameters by keyword; a `ctx` key in `args` is
+        refused below so it cannot shadow the injected name.
+
+        What `ctx` can reach is in the kernel's `SandboxContext` docstring: it is
+        offline, and the capabilities the tool design promised it are host-side tools
+        and connectors instead (spec §5).
+        """
+        arguments = dict(args or {})
+        if "ctx" in arguments:
+            return ToolResult(
+                result=None,
+                stdout="",
+                stderr="",
+                error=ErrorInfo(
+                    kind=ErrorKind.INVALID_ARGS.value,
+                    message="'ctx' is injected by the sandbox and cannot be supplied by the caller.",
+                ),
+            )
+        if self._tools is None:
+            return ToolResult(
+                result=None,
+                stdout="",
+                stderr="",
+                error=ErrorInfo(
+                    kind=ErrorKind.TOOL_NOT_FOUND.value,
+                    message="No tool source is configured for this session.",
+                ),
+            )
+        source = self._tools.source_for(name)
+        if source is None:
+            return ToolResult(
+                result=None,
+                stdout="",
+                stderr="",
+                error=ErrorInfo(
+                    kind=ErrorKind.TOOL_NOT_FOUND.value,
+                    message=f"There is no tool named '{name}'.",
+                ),
+            )
+
+        try:
+            json.dumps(arguments)
+        except (TypeError, ValueError) as exc:
+            return ToolResult(
+                result=None,
+                stdout="",
+                stderr="",
+                error=ErrorInfo(
+                    kind=ErrorKind.INVALID_ARGS.value,
+                    message=f"The arguments for '{name}' cannot be sent to the sandbox: {exc}",
+                ),
+            )
+
+        request = JobRequest(
+            kind="tool",
+            tool_name=name,
+            tool_source=source,
+            tool_args=arguments,
+            timeout=float(timeout or self._config.timeout_seconds),
+        )
+        with self._lock:
+            response, error = self._dispatch(request)
+            generated = self._collect_outputs()
+        return ToolResult(
+            result=response.result if response else None,
             stdout=response.stdout if response else "",
             stderr=response.stderr if response else "",
             error=error,

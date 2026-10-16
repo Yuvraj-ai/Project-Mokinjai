@@ -25,7 +25,13 @@ from app.services.sandbox.protocol import (
     classify,
     send_request,
 )
-from app.services.sandbox.session import ExecResult, GeneratedFile, SandboxSession
+from app.services.sandbox.session import (
+    ExecResult,
+    GeneratedFile,
+    SandboxSession,
+    ToolResult,
+)
+from app.services.sandbox.tools import InMemoryToolSource, ToolSource
 
 __all__ = [
     "BackendFactory",
@@ -35,6 +41,7 @@ __all__ = [
     "ErrorKind",
     "ExecResult",
     "GeneratedFile",
+    "InMemoryToolSource",
     "IsolationBackend",
     "JobRequest",
     "KERNEL_PATH",
@@ -43,6 +50,8 @@ __all__ = [
     "SandboxError",
     "SandboxSession",
     "SubprocessBackend",
+    "ToolResult",
+    "ToolSource",
     "classify",
     "docker_reachable",
     "kernel_failure",
