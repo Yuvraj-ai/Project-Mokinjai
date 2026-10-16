@@ -25,6 +25,7 @@ from app.services.sandbox.protocol import (
     classify,
     send_request,
 )
+from app.services.sandbox.session import SandboxSession
 
 __all__ = [
     "BackendFactory",
@@ -38,6 +39,7 @@ __all__ = [
     "KernelResponse",
     "SandboxConfig",
     "SandboxError",
+    "SandboxSession",
     "SubprocessBackend",
     "classify",
     "docker_reachable",
