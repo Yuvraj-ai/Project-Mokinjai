@@ -263,3 +263,268 @@ def test_connections_for_keys_by_instance_id(encryption_key):
     assert connections[second.id]["transport"] == "stdio"
 
 
+import pytest_asyncio
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.models.connector import ConnectorInstance
+
+
+@pytest_asyncio.fixture(scope="function")
+async def service_session(engine):
+    """A session the test drives itself, separate from the client's per-request one."""
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        yield session
+
+
+def _body(**overrides):
+    payload = {
+        "connector_type": "github",
+        "name": "GitHub (main)",
+        "auth_secret": "ghp-plain-token",
+        "config": {},
+    }
+    payload.update(overrides)
+    return payload
+
+
+async def test_the_catalog_endpoint_lists_every_entry(client, auth_headers, test_workspace):
+    response = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors/catalog", headers=auth_headers
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == len(list_entries())
+    github = next(entry for entry in body["entries"] if entry["id"] == "github")
+    assert github["display_name"] == "GitHub"
+    assert github["transport"] == "streamable_http"
+    assert github["auth_type"] == "api_key"
+    assert github["secret_label"] == "GitHub personal access token"
+    assert github["config_fields"] == []
+    assert "auth_encrypted" not in response.text
+
+
+async def test_create_stores_the_secret_encrypted_and_never_returns_it(
+    client, auth_headers, test_workspace, encryption_key, service_session
+):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "pending"
+    assert body["auth_scope"] == "workspace"
+    assert body["has_auth"] is True
+    assert body["tools"] == []
+    assert body["last_tested_at"] is None
+    assert "auth_encrypted" not in body
+    assert "ghp-plain-token" not in response.text
+
+    listed = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors", headers=auth_headers
+    )
+    assert listed.json()["total"] == 1
+    assert "ghp-plain-token" not in listed.text
+
+    stored = (await service_session.execute(select(ConnectorInstance))).scalar_one()
+    assert stored.auth_encrypted is not None
+    assert b"ghp-plain-token" not in stored.auth_encrypted
+
+
+async def test_create_rejects_an_unknown_connector_type(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(connector_type="no-such-connector"),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "Unknown connector type" in response.json()["detail"]
+
+
+async def test_create_rejects_an_oauth_entry(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(connector_type="notion", name="Notion", auth_secret=""),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "OAuth" in response.json()["detail"]
+
+
+async def test_create_rejects_a_duplicate_name_in_any_case(client, auth_headers, test_workspace, encryption_key):
+    first = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(name="GitHub Main"),
+        headers=auth_headers,
+    )
+    assert first.status_code == 201, first.text
+
+    second = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(name="github main"),
+        headers=auth_headers,
+    )
+
+    assert second.status_code == 409
+    assert "already exists" in second.json()["detail"]
+
+
+async def test_create_rejects_a_blank_secret_for_an_api_key_entry(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(auth_secret=""),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "personal access token" in response.json()["detail"]
+
+
+async def test_create_rejects_a_secret_for_an_entry_that_takes_none(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(
+            connector_type="everything",
+            name="Test server",
+            auth_secret="something",
+            config={},
+        ),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "does not take a secret" in response.json()["detail"]
+
+
+async def test_create_rejects_an_undeclared_config_key(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(
+            connector_type="filesystem",
+            name="Scratch",
+            auth_secret="",
+            config={"path": "/tmp/scratch", "typo": "x"},
+        ),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "typo" in response.json()["detail"]
+
+
+async def test_create_rejects_a_missing_config_value(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(connector_type="filesystem", name="Scratch", auth_secret="", config={}),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "'path'" in response.json()["detail"]
+
+
+async def test_create_rejects_a_field_the_body_does_not_declare(client, auth_headers, test_workspace):
+    """`extra="forbid"`: there is no API surface for a value with one legal value."""
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json={**_body(), "auth_scope": "per_user"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+
+
+async def test_a_created_connector_reads_back_pending_and_workspace_scoped(
+    client, auth_headers, test_workspace, encryption_key
+):
+    created = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(),
+        headers=auth_headers,
+    )
+    connector_id = created.json()["id"]
+
+    fetched = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors/{connector_id}", headers=auth_headers
+    )
+
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["status"] == "pending"
+    assert fetched.json()["auth_scope"] == "workspace"
+
+
+async def test_the_list_returns_catalog_metadata(client, auth_headers, test_workspace, encryption_key):
+    await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(),
+        headers=auth_headers,
+    )
+
+    listed = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors", headers=auth_headers
+    )
+
+    connector = listed.json()["connectors"][0]
+    assert connector["connector_type"] == "github"
+    assert connector["display_name"] == "GitHub"
+    assert connector["transport"] == "streamable_http"
+    assert connector["auth_type"] == "api_key"
+
+
+async def test_get_is_404_for_an_instance_in_another_workspace(
+    client, auth_headers, test_workspace, db_session, test_user, encryption_key
+):
+    """The lookup is scoped by workspace, not merely by id.
+
+    The second workspace is one the caller *is* a member of, so the 404 comes from the
+    connector lookup and not from RBAC refusing the workspace itself.
+    """
+    from app.models.workspace import Workspace, WorkspaceMember
+
+    created = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+
+    other = Workspace(name="Other Workspace", owner_id=test_user.id)
+    db_session.add(other)
+    await db_session.commit()
+    await db_session.refresh(other)
+    db_session.add(WorkspaceMember(workspace_id=other.id, user_id=test_user.id, role="owner"))
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/workspaces/{other.id}/connectors/{created.json()['id']}", headers=auth_headers
+    )
+
+    assert response.status_code == 404, response.text
+
+
+async def test_a_viewer_cannot_create(client, viewer_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors",
+        json=_body(),
+        headers=viewer_headers,
+    )
+
+    assert response.status_code == 403, response.text
+
+
+async def test_a_viewer_can_read_the_list(client, viewer_headers, test_workspace):
+    response = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors", headers=viewer_headers
+    )
+
+    assert response.status_code == 200, response.text
+
+
+
