@@ -733,5 +733,259 @@ async def test_a_viewer_cannot_update_or_delete(
     assert deleted.status_code == 403, deleted.text
 
 
+from pathlib import Path
+
+import app.routers.connectors as connectors_router
+from app.services import connector_runtime
 
 
+def test_the_adapter_is_pinned_in_requirements():
+    """Written by the install step, from the version pip actually resolved."""
+    requirements = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text()
+    pinned = [
+        line.strip()
+        for line in requirements.splitlines()
+        if line.strip().startswith("langchain-mcp-adapters==")
+    ]
+    assert len(pinned) == 1, f"expected one exact pin, found {pinned!r}"
+
+
+async def test_a_successful_probe_records_enabled_and_the_tool_names(
+    client, auth_headers, test_workspace, encryption_key, monkeypatch
+):
+    created = await _created(client, test_workspace.id, auth_headers)
+
+    async def fake_probe(instance):
+        return ["get_me", "list_issues"]
+
+    monkeypatch.setattr(connectors_router, "probe_connector_tools", fake_probe)
+
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}/test",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "enabled"
+    assert body["tools"] == ["get_me", "list_issues"]
+    assert body["last_error"] is None
+    assert body["last_tested_at"] is not None
+
+    listed = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors?usable=true", headers=auth_headers
+    )
+    assert listed.json()["total"] == 1, "an enabled connector is usable"
+
+
+async def test_a_failed_probe_records_the_error_and_still_returns_200(
+    client, auth_headers, test_workspace, encryption_key, monkeypatch
+):
+    """A server that does not answer is a result to show, not a failed request."""
+    created = await _created(client, test_workspace.id, auth_headers)
+
+    async def failing_probe(instance):
+        raise connector_runtime.ConnectorProbeError("401 Unauthorized")
+
+    monkeypatch.setattr(connectors_router, "probe_connector_tools", failing_probe)
+
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}/test",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["last_error"] == "401 Unauthorized"
+    assert body["tools"] == []
+    assert body["last_tested_at"] is not None
+
+    listed = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors?usable=true", headers=auth_headers
+    )
+    assert listed.json()["total"] == 0, "an errored connector is not usable"
+
+
+async def test_a_failed_probe_clears_a_previous_tool_list(
+    client, auth_headers, test_workspace, encryption_key, monkeypatch
+):
+    """`tools` always describes the most recent probe, so a stale list cannot be read
+    next to an error badge as though those tools still work."""
+    created = await _created(client, test_workspace.id, auth_headers)
+
+    async def ok_probe(instance):
+        return ["get_me"]
+
+    monkeypatch.setattr(connectors_router, "probe_connector_tools", ok_probe)
+    await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}/test",
+        headers=auth_headers,
+    )
+
+    async def failing_probe(instance):
+        raise connector_runtime.ConnectorProbeError("Connection refused")
+
+    monkeypatch.setattr(connectors_router, "probe_connector_tools", failing_probe)
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/{created['id']}/test",
+        headers=auth_headers,
+    )
+
+    assert response.json()["tools"] == []
+
+
+async def test_probe_of_an_unknown_instance_is_404(client, auth_headers, test_workspace):
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/no-such-id/test", headers=auth_headers
+    )
+
+    assert response.status_code == 404
+
+
+async def test_probe_of_a_type_that_left_the_catalog_is_400(
+    client, auth_headers, test_workspace, encryption_key, service_session
+):
+    from app.crypto import encrypt_api_key
+
+    instance = ConnectorInstance(
+        workspace_id=test_workspace.id,
+        connector_type="retired-connector",
+        name="Retired",
+        status="pending",
+        auth_scope="workspace",
+        auth_encrypted=encrypt_api_key("whatever"),
+        config={},
+        tool_names=[],
+    )
+    service_session.add(instance)
+    await service_session.commit()
+    await service_session.refresh(instance)
+
+    tested = await client.post(
+        f"/api/workspaces/{test_workspace.id}/connectors/{instance.id}/test",
+        headers=auth_headers,
+    )
+    listed = await client.get(
+        f"/api/workspaces/{test_workspace.id}/connectors", headers=auth_headers
+    )
+
+    assert tested.status_code == 400, tested.text
+    assert "Unknown connector type" in tested.json()["detail"]
+    assert listed.status_code == 200, "a list must tolerate catalog drift"
+    assert listed.json()["connectors"][0]["transport"] == "unknown"
+
+
+class _StubTool:
+    def __init__(self, name: str):
+        self.name = name
+
+
+class _StubClient:
+    """Enough of `MultiServerMCPClient` for the loader, without a transport."""
+
+    connections_seen: list[dict] = []
+    tools_by_server: dict[str, list[str]] = {}
+
+    def __init__(self, connections, **_kwargs):
+        _StubClient.connections_seen.append(connections)
+
+    async def get_tools(self, *, server_name=None):
+        return [_StubTool(name) for name in _StubClient.tools_by_server.get(server_name, [])]
+
+
+async def test_load_connector_tools_builds_the_client_from_the_instances(
+    encryption_key, service_session, test_workspace, monkeypatch
+):
+    from app.crypto import encrypt_api_key
+
+    _StubClient.connections_seen = []
+    _StubClient.tools_by_server = {}
+
+    first = ConnectorInstance(
+        workspace_id=test_workspace.id,
+        connector_type="github",
+        name="GitHub",
+        status="enabled",
+        auth_scope="workspace",
+        auth_encrypted=encrypt_api_key("ghp-token"),
+        config={},
+        tool_names=["get_me"],
+    )
+    second = ConnectorInstance(
+        workspace_id=test_workspace.id,
+        connector_type="filesystem",
+        name="Files",
+        status="pending",
+        auth_scope="workspace",
+        auth_encrypted=None,
+        config={"path": "/tmp/scratch"},
+        tool_names=[],
+    )
+    service_session.add_all([first, second])
+    await service_session.commit()
+    await service_session.refresh(first)
+    await service_session.refresh(second)
+
+    _StubClient.tools_by_server = {first.id: ["get_me"], second.id: ["read_file"]}
+    monkeypatch.setattr(connector_runtime, "MultiServerMCPClient", _StubClient)
+
+    tools = await connector_runtime.load_connector_tools([first, second])
+
+    assert [tool.name for tool in tools] == ["get_me", "read_file"]
+    assert set(_StubClient.connections_seen[0]) == {first.id, second.id}, "keyed by instance id"
+    assert (
+        _StubClient.connections_seen[0][first.id]["headers"]["Authorization"]
+        == "Bearer ghp-token"
+    ), "the loader decrypts, and does not filter by status"
+
+
+async def test_load_connector_tools_prefixes_a_colliding_name(
+    encryption_key, service_session, test_workspace, monkeypatch
+):
+    from app.crypto import encrypt_api_key
+
+    _StubClient.connections_seen = []
+    _StubClient.tools_by_server = {}
+
+    first = ConnectorInstance(
+        workspace_id=test_workspace.id,
+        connector_type="github",
+        name="Main",
+        status="enabled",
+        auth_scope="workspace",
+        auth_encrypted=encrypt_api_key("ghp-token"),
+        config={},
+        tool_names=[],
+    )
+    second = ConnectorInstance(
+        workspace_id=test_workspace.id,
+        connector_type="github",
+        name="Other",
+        status="enabled",
+        auth_scope="workspace",
+        auth_encrypted=encrypt_api_key("ghp-other"),
+        config={},
+        tool_names=[],
+    )
+    service_session.add_all([first, second])
+    await service_session.commit()
+    await service_session.refresh(first)
+    await service_session.refresh(second)
+
+    _StubClient.tools_by_server = {first.id: ["search"], second.id: ["search"]}
+    monkeypatch.setattr(connector_runtime, "MultiServerMCPClient", _StubClient)
+
+    tools = await connector_runtime.load_connector_tools([first, second])
+
+    assert sorted(tool.name for tool in tools) == ["main_search", "other_search"]
+
+
+async def test_load_connector_tools_returns_nothing_without_instances(monkeypatch):
+    monkeypatch.setattr(
+        connector_runtime,
+        "MultiServerMCPClient",
+        lambda *args, **kwargs: pytest.fail("no client should be built with nothing to load"),
+    )
+
+    assert await connector_runtime.load_connector_tools([]) == []

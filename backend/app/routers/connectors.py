@@ -1,8 +1,11 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crypto import encrypt_api_key
+from app.services.connector_runtime import ConnectorProbeError, probe_connector_tools
 from app.database import get_db
 from app.logging import logger
 from app.middleware.auth import get_current_user
@@ -285,4 +288,44 @@ async def delete_connector(
     await db.commit()
     logger.info(f"Connector instance {instance.id} deleted")
     return {"success": True}
+
+
+@router.post("/{connector_id}/test", response_model=ConnectorResponse)
+async def test_connector(
+    workspace_id: str,
+    connector_id: str,
+    current_user: User = Depends(get_current_user),
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Probe the server and record what it answered.
+
+    200 either way: a server that does not answer is a result to persist and show, not a
+    failed request — the same shape as an LLM profile's failed connection test. Enabling
+    is testing successfully; there is no second flag that can disagree with `status`.
+    """
+    instance = await _load_instance(db, workspace_id, connector_id)
+    entry = _entry_for(instance.connector_type)
+    _assert_supported(entry)
+
+    try:
+        tools = await probe_connector_tools(instance)
+    except ConnectorProbeError as exc:
+        instance.status = "error"
+        instance.last_error = str(exc)
+        instance.tool_names = []
+    else:
+        instance.status = "enabled"
+        instance.last_error = None
+        instance.tool_names = tools
+
+    instance.last_tested_at = datetime.now(timezone.utc)
+    db.add(instance)
+    await db.commit()
+    await db.refresh(instance)
+    logger.info(
+        f"Connector instance {instance.id} tested by user {current_user.id}: "
+        f"{instance.status} ({len(instance.tool_names)} tools)"
+    )
+    return _to_response(instance)
 

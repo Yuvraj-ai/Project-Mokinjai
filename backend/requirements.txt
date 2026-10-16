@@ -15,9 +15,10 @@ httpx==0.28.1
 openai==3.29.0
 anthropic==1.13.0
 langchain==1.4.5
-langchain-openai==1.7.1
 langchain-anthropic==1.7.6
 langchain-google-genai==4.4.1
+langchain-mcp-adapters==0.3.2
+langchain-openai==1.7.1
 python-dotenv==1.2.4
 pytest==9.1.1
 pytest-asyncio==1.4.0

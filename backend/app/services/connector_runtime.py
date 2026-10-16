@@ -6,8 +6,13 @@ edge. `connection_for` adds the one piece of state a pure function cannot reach:
 decryption of the instance's stored secret.
 """
 
+import asyncio
+from collections import Counter
 from collections.abc import Sequence
 from typing import Any
+
+from langchain_core.tools import BaseTool
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from app.crypto import decrypt_api_key
 from app.models.connector import ConnectorInstance
@@ -93,3 +98,65 @@ def connection_for(instance: ConnectorInstance) -> dict[str, Any]:
 def connections_for(instances: Sequence[ConnectorInstance]) -> dict[str, dict[str, Any]]:
     """Connection dicts keyed by instance id — unique, stable, and free of user text."""
     return {instance.id: connection_for(instance) for instance in instances}
+
+
+_PROBE_TIMEOUT_SECONDS = 30.0
+_TRUNCATED_LENGTH = 500
+
+
+def _short(exc: BaseException) -> str:
+    """The failure text as `llm_probe` produces it: one line, bounded, never empty."""
+    text = str(exc).strip().replace("\n", " ") or exc.__class__.__name__
+    return text if len(text) <= _TRUNCATED_LENGTH else text[:_TRUNCATED_LENGTH] + "…"
+
+
+async def _list_tool_names(connection: dict[str, Any], *, server_name: str) -> list[str]:
+    client = MultiServerMCPClient({server_name: connection})
+    try:
+        tools = await asyncio.wait_for(
+            client.get_tools(server_name=server_name), timeout=_PROBE_TIMEOUT_SECONDS
+        )
+    except TimeoutError as exc:
+        raise ConnectorProbeError(
+            f"the server did not answer within {_PROBE_TIMEOUT_SECONDS:.0f}s"
+        ) from exc
+    except Exception as exc:
+        # Every transport failure reads the same to a user: the server did not answer,
+        # and here is what it said. The connection dict is deliberately not logged.
+        raise ConnectorProbeError(_short(exc)) from exc
+    return sorted(tool.name for tool in tools)
+
+
+async def probe_connector_tools(instance: ConnectorInstance) -> list[str]:
+    """Ask one connector which tools it exposes. The test action calls this.
+
+    Imported into `app.routers.connectors` so tests can replace it there, exactly as
+    `test_llm_profiles.py` replaces `probe_llm`.
+    """
+    return await _list_tool_names(connection_for(instance), server_name=instance.id)
+
+
+async def load_connector_tools(instances: Sequence[ConnectorInstance]) -> list[BaseTool]:
+    """Every tool the given connectors expose, as LangChain tools.
+
+    This is Phase 3's entry point. It does not filter by `status`: an agent's assignment
+    is the authority (ADR-009/ADR-016) and a connector that failed its last probe may be
+    reachable now. Tools are collected per instance rather than in one call so a name
+    collision can be attributed; when two servers expose the same name, both are prefixed
+    with their owning instance's slug. Renaming is safe because the adapter opens the
+    session at invocation time from the stored connection, not from the tool's name.
+    """
+    if not instances:
+        return []
+    client = MultiServerMCPClient(connections_for(instances))
+
+    loaded: list[tuple[str, BaseTool]] = []
+    for instance in instances:
+        for tool in await client.get_tools(server_name=instance.id):
+            loaded.append((instance.name, tool))
+
+    collisions = Counter(tool.name for _, tool in loaded)
+    for owner, tool in loaded:
+        if collisions[tool.name] > 1:
+            tool.name = f"{slug(owner)}_{tool.name}"
+    return [tool for _, tool in loaded]
