@@ -5,6 +5,8 @@ Run against the normal ``db_session`` fixture: the point of putting the logic in
 second database to be tested.
 """
 
+import os
+
 import pytest
 
 from app.services.seed import assert_schema_present
@@ -31,7 +33,7 @@ from sqlalchemy import func, select
 
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
-from app.services.seed import assert_schema_present, seed_admin_and_workspace
+from app.services.seed import SeedResult, assert_schema_present, seed_admin_and_workspace
 from app.utils.security import verify_password
 
 SEED = dict(email="admin@mokinjay.local", password="correct-horse-battery-staple")
@@ -149,3 +151,79 @@ async def test_seed_does_not_elevate_an_existing_non_superuser(db_session):
         await db_session.execute(select(User).where(User.email == "existing@mokinjay.local"))
     ).scalars().first()
     assert user.is_superuser is False
+
+
+from seed import describe_target, format_summary, requires_confirmation, resolve_password
+
+
+class _Args:
+    def __init__(self, password=None, generate_password=False):
+        self.password = password
+        self.generate_password = generate_password
+
+
+def test_describe_target_returns_host_and_database_only():
+    host, database = describe_target(
+        "postgresql+asyncpg://someuser:somesecret@db.example.com:5432/mokinjay"
+    )
+    assert host == "db.example.com"
+    assert database == "mokinjay"
+
+
+def test_describe_target_leaks_no_credentials():
+    """The target is printed before writing, so it must carry no secrets."""
+    host, database = describe_target(
+        "postgresql+asyncpg://someuser:somesecret@db.example.com:5432/mokinjay"
+    )
+    assert "somesecret" not in host
+    assert "somesecret" not in database
+    assert "someuser" not in host
+
+
+def test_local_hosts_need_no_confirmation():
+    for host in ("localhost", "127.0.0.1", ""):
+        assert requires_confirmation(host) is False
+
+
+def test_remote_hosts_need_confirmation():
+    assert requires_confirmation("db.example.com") is True
+
+
+def test_resolve_password_prefers_an_explicit_flag(monkeypatch):
+    monkeypatch.setenv("MOKINJAY_SEED_PASSWORD", "from-env")
+    password, generated = resolve_password(_Args(password="from-flag"), os.environ)
+    assert password == "from-flag"
+    assert generated is False
+
+
+def test_resolve_password_falls_back_to_the_environment(monkeypatch):
+    monkeypatch.setenv("MOKINJAY_SEED_PASSWORD", "from-env")
+    password, generated = resolve_password(_Args(), os.environ)
+    assert password == "from-env"
+    assert generated is False
+
+
+def test_resolve_password_generates_a_long_one_when_asked():
+    password, generated = resolve_password(_Args(generate_password=True), {})
+    assert generated is True
+    assert len(password) >= 20
+
+
+def test_summary_cannot_contain_the_password():
+    """``format_summary`` does not take the password as a parameter.
+
+    That is a structural guarantee rather than a checked one: there is no code
+    path by which the credential can reach the summary text.
+    """
+    result = SeedResult(
+        user_id="u1",
+        user_created=True,
+        workspace_id="w1",
+        workspace_created=False,
+        membership_created=False,
+    )
+    text = format_summary(result, host="localhost", database="mokinjay")
+    assert "u1" in text
+    assert "w1" in text
+    assert "localhost" in text
+    assert "mokinjay" in text
