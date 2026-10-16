@@ -11,6 +11,7 @@ from app.models.session import Session
 from app.models.tool import Tool
 from app.models.skill import Skill
 from app.models.external_database import ExternalDatabaseConnection
+from app.models.connector import ConnectorInstance
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "Tool",
     "Skill",
     "ExternalDatabaseConnection",
+    "ConnectorInstance",
 ]

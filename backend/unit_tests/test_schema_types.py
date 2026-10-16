@@ -24,6 +24,8 @@ JSONB_COLUMNS = [
     ("knowledge_bases", "config"),
     ("documents", "metadata"),
     ("structured_outputs", "fields"),
+    ("connector_instances", "config"),
+    ("connector_instances", "tool_names"),
 ]
 
 

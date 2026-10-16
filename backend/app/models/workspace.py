@@ -30,6 +30,9 @@ class Workspace(Base):
     external_database_connections = relationship(
         "ExternalDatabaseConnection", back_populates="workspace", cascade="all, delete-orphan"
     )
+    connector_instances = relationship(
+        "ConnectorInstance", back_populates="workspace", cascade="all, delete-orphan"
+    )
 
 
 class WorkspaceMember(Base):

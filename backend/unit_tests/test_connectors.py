@@ -119,3 +119,34 @@ def test_slack_and_notion_are_declared_with_their_real_auth_type():
 def test_an_unknown_connector_type_has_no_entry():
     assert get_entry("no-such-connector") is None
     assert len(ENTRIES) == len(list_entries())
+
+
+async def test_connector_instance_round_trips_with_its_defaults(db_session, test_workspace):
+    from sqlalchemy import select
+
+    from app.models.connector import ConnectorInstance
+
+    instance = ConnectorInstance(
+        workspace_id=test_workspace.id,
+        connector_type="filesystem",
+        name="Project files",
+        status="pending",
+        config={"path": "/srv/data"},
+    )
+    db_session.add(instance)
+    await db_session.commit()
+
+    found = (
+        await db_session.execute(
+            select(ConnectorInstance).where(ConnectorInstance.id == instance.id)
+        )
+    ).scalar_one()
+
+    assert found.auth_scope == "workspace", "the Model B migration point defaults to Model A"
+    assert found.auth_encrypted is None, "a connector that takes no secret stores no ciphertext"
+    assert found.tool_names == [], "no probe has run yet"
+    assert found.last_error is None
+    assert found.last_tested_at is None
+    assert found.created_at is not None, "created_at should come from the server default"
+    assert found.updated_at is not None, "updated_at should come from the server default"
+
