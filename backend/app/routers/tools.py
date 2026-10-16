@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.logging import logger
+from app.middleware.auth import get_current_user
 from app.middleware.rbac import require_workspace_role
 from app.models.tool import Tool
+from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.schemas.tool import (
     BuiltinToolListResponse,
@@ -26,6 +28,7 @@ from app.schemas.tool import (
 )
 from app.services.tool_schema import compile_input_schema, extract_schema
 from app.tools import BUILTIN_TOOLS, list_builtin_tools
+from app.utils.errors import BadRequestException, ConflictException, NotFoundException
 
 router = APIRouter()
 
@@ -67,6 +70,35 @@ async def _load_rows(db: AsyncSession, workspace_id: str) -> list[Tool]:
         .order_by(Tool.updated_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def _load_row(db: AsyncSession, workspace_id: str, tool_id: str) -> Tool:
+    result = await db.execute(
+        select(Tool).where(Tool.id == tool_id, Tool.workspace_id == workspace_id)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise NotFoundException("Tool")
+    return row
+
+
+def _assert_name_is_free(rows: list[Tool], name: str, *, exclude_id: str | None) -> None:
+    """A name must be free in the workspace, and must not shadow a built-in.
+
+    A built-in's key is what a skill's `/ToolName` and the runtime resolve, so a
+    custom tool that took one would make that resolution ambiguous. Only the key is
+    compared: a display name like "Current Time" is not an identifier and cannot be
+    a function name in the first place.
+    """
+    if name.lower() in {key.lower() for key in BUILTIN_TOOLS}:
+        raise ConflictException(
+            f'"{name}" is a built-in tool. A custom tool cannot use its name.'
+        )
+
+    wanted = name.lower()
+    for row in rows:
+        if row.id != exclude_id and row.name.lower() == wanted:
+            raise ConflictException(f'A tool named "{row.name}" already exists.')
 
 
 @router.get("/builtin", response_model=BuiltinToolListResponse)
@@ -128,3 +160,94 @@ async def list_tools(
     rows = await _load_rows(db, workspace_id)
     tools = [_to_response(row) for row in rows]
     return ToolListResponse(tools=tools, total=len(tools))
+
+
+@router.post("", response_model=ToolResponse)
+async def create_tool(
+    workspace_id: str,
+    request: ToolWriteRequest,
+    current_user: User = Depends(get_current_user),
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store a tool. Its name, description and schema all come from the code."""
+    result = extract_schema(request.code)
+    if result.schema is None:
+        raise BadRequestException(" ".join(result.errors))
+
+    rows = await _load_rows(db, workspace_id)
+    _assert_name_is_free(rows, result.schema.name, exclude_id=None)
+
+    row = Tool(workspace_id=workspace_id, name=result.schema.name, code=request.code)
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    logger.info(f"Tool '{row.name}' created by user {current_user.id}")
+    return _to_response(row)
+
+
+@router.get("/{tool_id}", response_model=ToolResponse)
+async def get_tool(
+    workspace_id: str,
+    tool_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
+    db: AsyncSession = Depends(get_db),
+):
+    return _to_response(await _load_row(db, workspace_id, tool_id))
+
+
+@router.put("/{tool_id}", response_model=ToolResponse)
+async def update_tool(
+    workspace_id: str,
+    tool_id: str,
+    request: ToolWriteRequest,
+    current_user: User = Depends(get_current_user),
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace a tool's code. Renaming the function renames the tool.
+
+    Nothing cascades. No resource references a tool by name yet — a skill's
+    `/ToolName` is the first that will — and per ADR-009 an agent built with this
+    tool keeps the descriptor and the code it was frozen with until it is rebuilt.
+    """
+    row = await _load_row(db, workspace_id, tool_id)
+
+    result = extract_schema(request.code)
+    if result.schema is None:
+        raise BadRequestException(" ".join(result.errors))
+
+    rows = await _load_rows(db, workspace_id)
+    _assert_name_is_free(rows, result.schema.name, exclude_id=row.id)
+
+    old_name = row.name
+    row.name = result.schema.name
+    row.code = request.code
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    if row.name != old_name:
+        logger.info(f"Tool '{old_name}' renamed to '{row.name}' by user {current_user.id}")
+    else:
+        logger.info(f"Tool '{row.name}' updated by user {current_user.id}")
+    return _to_response(row)
+
+
+@router.delete("/{tool_id}")
+async def delete_tool(
+    workspace_id: str,
+    tool_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a tool.
+
+    Nothing can reference one yet, so there is nothing to block on. When the
+    `skills` table lands, a tool a skill's `/ToolName` points at must be refused
+    here with 409, the way `/structured-outputs` refuses a referenced definition.
+    """
+    row = await _load_row(db, workspace_id, tool_id)
+    await db.delete(row)
+    await db.commit()
+    logger.info(f"Tool '{row.name}' deleted")
+    return {"success": True}
