@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { GitBranch, Play, FileText, Bot, Braces } from 'lucide-react'
+import { GitBranch, Play, FileText, Bot, Braces, Wrench } from 'lucide-react'
 
 const navItems = [
   { to: '/workflows', label: 'Workflows', icon: GitBranch },
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/prompts', label: 'System Prompts', icon: FileText },
   { to: '/structured-outputs', label: 'Structured Output', icon: Braces },
   { to: '/llms', label: 'LLMs', icon: Bot },
+  { to: '/tools', label: 'Tools', icon: Wrench },
 ]
 
 interface SidebarProps {

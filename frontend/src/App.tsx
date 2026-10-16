@@ -6,6 +6,7 @@ import ExecutionHistoryPage from './pages/ExecutionHistoryPage'
 import PromptsPage from './pages/PromptsPage'
 import LlmProfilesPage from './pages/LlmProfilesPage'
 import StructuredOutputsPage from './pages/StructuredOutputsPage'
+import ToolsPage from './pages/ToolsPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/prompts" element={<PromptsPage />} />
         <Route path="/structured-outputs" element={<StructuredOutputsPage />} />
         <Route path="/llms" element={<LlmProfilesPage />} />
+        <Route path="/tools" element={<ToolsPage />} />
       </Route>
     </Routes>
   )

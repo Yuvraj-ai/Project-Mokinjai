@@ -45,4 +45,12 @@ apiClient.interceptors.response.use(
   }
 )
 
+/** The `detail` a FastAPI error carries, when there is one. */
+export function axiosDetail(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('response' in error)) return null
+  const response = (error as { response?: { data?: { detail?: unknown } } }).response
+  const detail = response?.data?.detail
+  return typeof detail === 'string' ? detail : null
+}
+
 export default apiClient
