@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { GitBranch, Play, FileText, Bot, Braces, BookOpen, Wrench } from 'lucide-react'
+import { GitBranch, Play, FileText, Bot, Braces, BookOpen, Wrench, Library } from 'lucide-react'
 
 const navItems = [
   { to: '/workflows', label: 'Workflows', icon: GitBranch },
   { to: '/executions', label: 'Executions', icon: Play },
   { to: '/prompts', label: 'System Prompts', icon: FileText },
   { to: '/structured-outputs', label: 'Structured Output', icon: Braces },
+  { to: '/knowledge-base', label: 'Knowledge Base', icon: Library },
   { to: '/skills', label: 'Skills', icon: BookOpen },
   { to: '/llms', label: 'LLMs', icon: Bot },
   { to: '/tools', label: 'Tools', icon: Wrench },
