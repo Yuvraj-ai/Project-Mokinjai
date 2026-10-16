@@ -281,3 +281,79 @@ def rewrite_skill_references(content: str, old_name: str, new_name: str) -> str:
         cursor = match.end
     pieces.append(content[cursor:])
     return "".join(pieces)
+
+
+# --------------------------------------------------------------------------- #
+# Build-time compilation
+# --------------------------------------------------------------------------- #
+
+DEFAULT_READ_SKILL_TOOL = "read_skill"
+
+
+@dataclass(frozen=True)
+class MenuEntry:
+    """One line of the menu the LLM sees at startup."""
+
+    name: str
+    description: str
+
+    def line(self) -> str:
+        return f"- {self.name}: {self.description}"
+
+
+@dataclass(frozen=True)
+class CompiledSkills:
+    """What a set of assigned skills contributes to an agent build.
+
+    This is the contract the agent runtime consumes. Nothing here executes: the
+    runtime that registers `read_skill_tool` and injects `menu_text()` into the
+    system prompt belongs to the agent runtime, not to Skills.
+    """
+
+    menu: list[MenuEntry]
+    contents: dict[str, str]
+    tool_names: list[str]
+    read_skill_tool: str
+
+    def menu_text(self) -> str:
+        return "\n".join(entry.line() for entry in self.menu)
+
+
+def compile_skills(
+    root_names: Iterable[str],
+    workspace_skills: Mapping[str, SkillDefinition],
+    *,
+    read_skill_tool: str = DEFAULT_READ_SKILL_TOOL,
+) -> CompiledSkills:
+    """Everything an agent build takes from a set of assigned skills.
+
+    Skills do not execute; they contribute context. Three properties are the
+    contract:
+
+    - `menu` lists only the assigned skills. A skill reached by `@` is discovered
+      by reading a parent's content, where the pointer is visible, not from the
+      menu; listing it would grow the startup prompt with the whole closure.
+    - `contents` is the whole reachable closure, which is the scope `read_skill`
+      may serve. A name outside it must be refused (ADR-016).
+    - `tool_names` is the union of `/` references across that closure, because
+      tools are never lazy: when the LLM reads a sub-skill that depends on a
+      tool, that tool must already be in the tool list.
+    """
+    menu: list[MenuEntry] = []
+    contents: dict[str, str] = {}
+    tool_names: dict[str, str] = {}
+
+    for root_name in root_names:
+        root = _lookup(root_name, workspace_skills)
+        menu.append(MenuEntry(name=root.name, description=root.description))
+        for definition in [root, *_reachable(root, workspace_skills)]:
+            contents.setdefault(definition.name, definition.content)
+            for name in extract_references(definition.content).tool_refs:
+                tool_names.setdefault(name.lower(), name)
+
+    return CompiledSkills(
+        menu=menu,
+        contents=contents,
+        tool_names=sorted(tool_names.values(), key=str.lower),
+        read_skill_tool=read_skill_tool,
+    )

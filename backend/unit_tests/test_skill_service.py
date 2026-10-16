@@ -14,6 +14,7 @@ from app.services.skill import (
     SkillDefinition,
     SkillError,
     SkillReferences,
+    compile_skills,
     extract_references,
     find_skill_referrers,
     rewrite_skill_references,
@@ -266,3 +267,94 @@ class TestRename:
 
     def test_touches_nothing_when_there_is_no_reference(self):
         assert rewrite_skill_references("plain text", "Step", "SolutionStep") == "plain text"
+
+
+class TestCompile:
+    def test_the_menu_lists_only_the_assigned_roots(self):
+        parent = skill("Parent", description="Sets the tone.", content="@Child")
+        child = skill("Child", description="Details.")
+
+        compiled = compile_skills(["Parent"], defs(parent, child))
+
+        assert [entry.name for entry in compiled.menu] == ["Parent"]
+        assert compiled.menu[0].description == "Sets the tone."
+
+    def test_the_menu_preserves_the_assigned_order(self):
+        a = skill("A")
+        b = skill("B")
+
+        compiled = compile_skills(["B", "A"], defs(a, b))
+
+        assert [entry.name for entry in compiled.menu] == ["B", "A"]
+
+    def test_the_menu_text_is_one_line_per_skill(self):
+        parent = skill("Parent", description="Sets the tone.")
+
+        compiled = compile_skills(["Parent"], defs(parent))
+
+        assert compiled.menu_text() == "- Parent: Sets the tone."
+
+    def test_contents_hold_the_whole_closure(self):
+        parent = skill("Parent", content="@Child")
+        child = skill("Child", content="@Grandchild")
+        grandchild = skill("Grandchild", content="Deep.")
+
+        compiled = compile_skills(["Parent"], defs(parent, child, grandchild))
+
+        assert set(compiled.contents) == {"Parent", "Child", "Grandchild"}
+        assert compiled.contents["Grandchild"] == "Deep."
+
+    def test_content_is_the_raw_markdown_with_the_markers_intact(self):
+        parent = skill("Parent", content="Follow @Child.")
+        child = skill("Child")
+
+        compiled = compile_skills(["Parent"], defs(parent, child))
+
+        assert compiled.contents["Parent"] == "Follow @Child."
+
+    def test_a_root_tool_reference_is_collected(self):
+        parent = skill("Parent", content="Call /SearchWeb.")
+
+        assert compile_skills(["Parent"], defs(parent)).tool_names == ["SearchWeb"]
+
+    def test_a_sub_skill_tool_reference_is_collected_too(self):
+        """Tools are never lazy, so a sub-skill's tool is attached up front."""
+        parent = skill("Parent", content="Follow @Child.")
+        child = skill("Child", content="Call /SearchWeb and /Lookup.")
+
+        compiled = compile_skills(["Parent"], defs(parent, child))
+
+        assert compiled.tool_names == ["Lookup", "SearchWeb"]
+
+    def test_tool_names_are_de_duplicated_case_insensitively(self):
+        parent = skill("Parent", content="/SearchWeb then /searchweb")
+
+        assert compile_skills(["Parent"], defs(parent)).tool_names == ["SearchWeb"]
+
+    def test_the_read_skill_tool_is_named(self):
+        parent = skill("Parent")
+
+        assert compile_skills(["Parent"], defs(parent)).read_skill_tool == "read_skill"
+
+    def test_two_roots_that_share_a_sub_skill_compose(self):
+        a = skill("A", description="A.", content="/One")
+        b = skill("B", description="B.", content="@A")
+
+        compiled = compile_skills(["A", "B"], defs(a, b))
+
+        assert [entry.name for entry in compiled.menu] == ["A", "B"]
+        assert compiled.tool_names == ["One"]
+        assert set(compiled.contents) == {"A", "B"}
+
+    def test_an_unknown_root_is_rejected(self):
+        with pytest.raises(SkillError) as excinfo:
+            compile_skills(["Ghost"], defs(skill("Writer")))
+
+        assert "Ghost" in str(excinfo.value)
+
+    def test_a_cyclic_root_is_rejected(self):
+        a = skill("A", content="@B")
+        b = skill("B", content="@A")
+
+        with pytest.raises(SkillError):
+            compile_skills(["A"], defs(a, b))
