@@ -311,3 +311,161 @@ async def test_a_failed_commit_removes_the_written_object(storage_root):
         await _persist_document(_CommitFails(), storage, document)
 
     assert await storage.exists(key) is False, "the half that succeeded must be undone"
+
+
+async def _upload(client, auth_headers, workspace_id, kb_id, name="notes.txt", body=b"hello"):
+    response = await client.post(
+        _documents_url(workspace_id, kb_id),
+        files={"file": (name, body, "text/plain")},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _stored_files(storage_root):
+    """Every file under the storage root, as paths, so a leak is visible."""
+    return sorted(path for path in storage_root.rglob("*") if path.is_file())
+
+
+async def test_listing_returns_the_documents(client, auth_headers, test_workspace, storage_root):
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    first = await _upload(client, auth_headers, test_workspace.id, kb_id, name="a.txt")
+    second = await _upload(client, auth_headers, test_workspace.id, kb_id, name="b.txt")
+
+    response = await client.get(
+        _documents_url(test_workspace.id, kb_id), headers=auth_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 2
+    assert {d["id"] for d in response.json()["documents"]} == {first["id"], second["id"]}
+
+
+async def test_getting_one_document_returns_its_metadata(
+    client, auth_headers, test_workspace, storage_root
+):
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    created = await _upload(client, auth_headers, test_workspace.id, kb_id)
+
+    response = await client.get(
+        f"{_documents_url(test_workspace.id, kb_id)}/{created['id']}", headers=auth_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["filename"] == "notes.txt"
+    assert response.json()["status"] == "stored"
+
+
+async def test_download_returns_the_bytes_and_replays_the_stored_type(
+    client, auth_headers, test_workspace, storage_root
+):
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    created = await _upload(client, auth_headers, test_workspace.id, kb_id, body=b"exact bytes")
+
+    response = await client.get(
+        f"{_documents_url(test_workspace.id, kb_id)}/{created['id']}/download",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.content == b"exact bytes"
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.headers["content-disposition"] == 'attachment; filename="notes.txt"'
+
+
+async def test_download_keeps_only_the_basename_of_a_client_filename(
+    client, auth_headers, test_workspace, storage_root
+):
+    """The client's path is a label, and the storage key is untouched by it."""
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    created = await _upload(
+        client, auth_headers, test_workspace.id, kb_id, name="../evil.txt"
+    )
+
+    assert created["filename"] == "evil.txt"
+    assert created["metadata"]["original_filename"] == "evil.txt"
+
+    response = await client.get(
+        f"{_documents_url(test_workspace.id, kb_id)}/{created['id']}/download",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-disposition"] == 'attachment; filename="evil.txt"'
+
+
+def test_the_header_sanitiser_removes_quotes_and_control_characters():
+    """A pure unit, because CR and LF cannot be sent reliably inside a multipart filename.
+
+    The endpoint test above covers the basename rule end to end; this covers the
+    characters that would let a filename terminate its own header parameter.
+    """
+    from app.routers.knowledge import _header_safe_filename
+
+    assert _header_safe_filename('a\r\nb"c;d.txt') == "a__b_c_d.txt"
+    assert _header_safe_filename('"') == "download"
+
+
+async def test_download_is_a_viewer_operation(
+    client, auth_headers, viewer_headers, test_workspace, storage_root
+):
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    created = await _upload(client, auth_headers, test_workspace.id, kb_id)
+
+    response = await client.get(
+        f"{_documents_url(test_workspace.id, kb_id)}/{created['id']}/download",
+        headers=viewer_headers,
+    )
+
+    assert response.status_code == 200, response.text
+
+
+async def test_deleting_a_document_removes_the_row_and_the_object(
+    client, auth_headers, test_workspace, storage_root
+):
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    created = await _upload(client, auth_headers, test_workspace.id, kb_id)
+    assert len(_stored_files(storage_root)) == 1
+
+    response = await client.delete(
+        f"{_documents_url(test_workspace.id, kb_id)}/{created['id']}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+
+    assert _stored_files(storage_root) == []
+    gone = await client.get(
+        f"{_documents_url(test_workspace.id, kb_id)}/{created['id']}", headers=auth_headers
+    )
+    assert gone.status_code == 404, gone.text
+
+
+async def test_deleting_a_knowledge_base_removes_its_objects(
+    client, auth_headers, test_workspace, storage_root
+):
+    """The endpoint that used to strand every object it owned."""
+    kb_id = await _create_kb(client, auth_headers, test_workspace)
+    await _upload(client, auth_headers, test_workspace.id, kb_id, name="a.txt")
+    await _upload(client, auth_headers, test_workspace.id, kb_id, name="b.txt")
+    assert len(_stored_files(storage_root)) == 2
+
+    response = await client.delete(f"{_kb_url(test_workspace.id)}/{kb_id}", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert _stored_files(storage_root) == [], "the knowledge base's objects must go with it"
+
+
+async def test_a_document_is_not_readable_through_another_knowledge_base(
+    client, auth_headers, test_workspace, storage_root
+):
+    first_kb = await _create_kb(client, auth_headers, test_workspace, name="First")
+    second_kb = await _create_kb(client, auth_headers, test_workspace, name="Second")
+    created = await _upload(client, auth_headers, test_workspace.id, first_kb)
+
+    for suffix in ("", "/download"):
+        response = await client.get(
+            f"{_documents_url(test_workspace.id, second_kb)}/{created['id']}{suffix}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404, f"{suffix or '/'} leaked across knowledge bases"
+

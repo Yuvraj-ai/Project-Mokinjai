@@ -1,7 +1,8 @@
+import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +14,14 @@ from app.middleware.rbac import require_workspace_role
 from app.models.knowledge import DOCUMENT_STATUS_STORED, Document, KnowledgeBase
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
-from app.schemas.knowledge import DocumentResponse, KnowledgeBaseCreate, KnowledgeBaseResponse
+from app.schemas.knowledge import (
+    DocumentListResponse,
+    DocumentResponse,
+    KnowledgeBaseCreate,
+    KnowledgeBaseResponse,
+)
 from app.services.storage import (
+    ObjectNotFoundError,
     StorageBackend,
     StorageError,
     build_storage_key,
@@ -126,21 +133,30 @@ async def delete_knowledge_base(
     db: AsyncSession = Depends(get_db),
 ):
     logger.info(f"Deleting knowledge base {kb_id}")
-    result = await db.execute(
-        select(KnowledgeBase).where(
-            KnowledgeBase.id == kb_id,
-            KnowledgeBase.workspace_id == workspace_id,
-        )
-    )
-    kb = result.scalar_one_or_none()
-    if kb is None:
-        logger.warning(f"Knowledge base {kb_id} not found")
-        raise NotFoundException("Knowledge base")
+    kb = await _load_knowledge_base(db, workspace_id, kb_id)
+
+    # Collect the keys before the rows go: after the commit there is nothing left to
+    # tell us which objects belonged to this knowledge base.
+    documents = (
+        await db.execute(select(Document).where(Document.knowledge_base_id == kb_id))
+    ).scalars().all()
+    keys = [row.file_url for row in documents if row.file_url]
 
     await db.delete(kb)
     await db.commit()
-    logger.info(f"Knowledge base {kb_id} deleted")
+
+    # Same ordering rule as a single document: rows first, bytes second, so a failure
+    # here can only orphan objects.
+    storage = get_storage()
+    for key in keys:
+        try:
+            await storage.delete_file(key)
+        except StorageError:
+            logger.exception(f"Orphaned object left behind at {key!r}")
+
+    logger.info(f"Knowledge base {kb_id} deleted with {len(keys)} stored object(s)")
     return {"success": True}
+
 
 
 async def _load_knowledge_base(
@@ -190,6 +206,32 @@ def _to_document_response(row: Document) -> DocumentResponse:
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _header_safe_filename(name: str) -> str:
+    """A filename that cannot terminate its own Content-Disposition parameter.
+
+    Quotes, backslashes and control characters in a client-supplied name would let it
+    end the quoted parameter or the header. Anything outside a conservative set is
+    replaced rather than escaped, because the value only needs to be recognisable.
+    """
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("._")
+    return cleaned or "download"
+
+
+async def _load_document(db: AsyncSession, kb_id: str, document_id: str) -> Document:
+    result = await db.execute(
+        select(Document).where(
+            Document.id == document_id,
+            Document.knowledge_base_id == kb_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        logger.warning(f"Document {document_id} not found in knowledge base {kb_id}")
+        raise NotFoundException("Document")
+    return row
+
 
 
 async def _persist_document(
@@ -290,4 +332,97 @@ async def upload_document(
     # docs/superpowers/specs/2026-10-16-vector-database-design.md section 4.
 
     return _to_document_response(document)
+
+
+@router.get("/{kb_id}/documents", response_model=DocumentListResponse)
+async def list_documents(
+    workspace_id: str,
+    kb_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _load_knowledge_base(db, workspace_id, kb_id)
+    result = await db.execute(
+        select(Document)
+        .where(Document.knowledge_base_id == kb_id)
+        .order_by(Document.created_at.desc())
+    )
+    rows = list(result.scalars().all())
+    return DocumentListResponse(
+        documents=[_to_document_response(row) for row in rows], total=len(rows)
+    )
+
+
+@router.get("/{kb_id}/documents/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    workspace_id: str,
+    kb_id: str,
+    document_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _load_knowledge_base(db, workspace_id, kb_id)
+    return _to_document_response(await _load_document(db, kb_id, document_id))
+
+
+@router.get("/{kb_id}/documents/{document_id}/download")
+async def download_document(
+    workspace_id: str,
+    kb_id: str,
+    document_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
+    db: AsyncSession = Depends(get_db),
+):
+    """The bytes, served by the backend. Downloading is a read, so a viewer may do it."""
+    await _load_knowledge_base(db, workspace_id, kb_id)
+    row = await _load_document(db, kb_id, document_id)
+    if not row.file_url:
+        # Only reachable for a row that predates this plan. Every row this API creates
+        # has a key.
+        raise NotFoundException("Stored file")
+
+    try:
+        data = await get_storage().download_file(row.file_url)
+    except ObjectNotFoundError:
+        # The row is the index, so bytes that are missing are a real inconsistency.
+        # Reported as 404 rather than 500: there is nothing for a retry to fix.
+        logger.error(f"Document {row.id} has no stored object at {row.file_url!r}")
+        raise NotFoundException("Stored file")
+    except StorageError:
+        logger.exception(f"Storage read failed for document {row.id}")
+        raise AppException(status_code=500, detail="The file could not be read")
+
+    filename = _header_safe_filename(row.filename or row.id)
+    return Response(
+        content=data,
+        media_type=row.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.delete("/{kb_id}/documents/{document_id}")
+async def delete_document(
+    workspace_id: str,
+    kb_id: str,
+    document_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _load_knowledge_base(db, workspace_id, kb_id)
+    row = await _load_document(db, kb_id, document_id)
+    key = row.file_url
+
+    await db.delete(row)
+    await db.commit()
+
+    # Row first, bytes second: a failed byte delete can only orphan an object, never
+    # leave a row pointing at nothing.
+    if key:
+        try:
+            await get_storage().delete_file(key)
+        except StorageError:
+            logger.exception(f"Orphaned object left behind at {key!r}")
+    logger.info(f"Document {document_id} deleted")
+    return {"success": True}
+
 
