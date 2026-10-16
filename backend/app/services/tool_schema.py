@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, cast
 
+from pydantic import ValidationError
+
 from app.schemas.tool import ItemType, ParameterType, ToolParameter, ToolSchema
 
 
@@ -245,8 +247,8 @@ def extract_schema(source: str) -> ExtractionResult:
         )
 
     defaults = _defaults(function)
-    return ExtractionResult(
-        ToolSchema(
+    try:
+        schema = ToolSchema(
             name=function.name,
             description=summary,
             parameters=[
@@ -261,9 +263,22 @@ def extract_schema(source: str) -> ExtractionResult:
                 for node in arguments
             ],
             returns=returned.type,
-        ),
-        [],
-    )
+        )
+    except ValidationError as exc:
+        # Backstop for any schema constraint the checks above do not name — a
+        # non-ASCII parameter name, say. The module returns errors, never raises.
+        return ExtractionResult(
+            None,
+            [
+                f"`{function.name}` cannot be described to a model: "
+                + "; ".join(
+                    f"{error['msg']} (at {'.'.join(str(part) for part in error['loc'])})"
+                    for error in exc.errors()
+                )
+                + "."
+            ],
+        )
+    return ExtractionResult(schema, [])
 
 
 def compile_input_schema(schema: ToolSchema) -> dict[str, Any]:

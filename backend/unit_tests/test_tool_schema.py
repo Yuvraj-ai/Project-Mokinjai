@@ -295,6 +295,10 @@ class TestRejections:
                 'def one(value: str) -> str:\n    """Do a thing.\n\n    Args:\n        value:\n    """\n    return value\n',
                 "Empty for",
             ),
+            (
+                'def one(café: str) -> str:\n    """Do a thing.\n\n    Args:\n        café: The value.\n    """\n    return café\n',
+                "cannot be described",
+            ),
         ],
     )
     def test_each_rejection_names_what_is_missing(self, source, expected):
