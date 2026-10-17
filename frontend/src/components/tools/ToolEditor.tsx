@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import CodeMirror from '@uiw/react-codemirror'
+import { python } from '@codemirror/lang-python'
+import { indentWithTab } from '@codemirror/commands'
+import { keymap } from '@codemirror/view'
+import { useThemeStore } from '../../store/themeStore'
 import {
   createTool,
   parameterTypeLabel,
@@ -32,6 +37,7 @@ interface Props {
 
 /** The code box, and beneath it what the code describes, recomputed as it is typed. */
 export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Props) {
+  const { dark } = useThemeStore()
   const [code, setCode] = useState(tool?.code ?? EXAMPLE)
   const [validation, setValidation] = useState<ToolValidation | null>(null)
   const [saving, setSaving] = useState(false)
@@ -109,13 +115,26 @@ export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Prop
         </div>
       </div>
 
-      <textarea
-        value={code}
-        onChange={(event) => setCode(event.target.value)}
-        rows={16}
-        spellCheck={false}
-        className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 p-3 text-[12px] leading-relaxed font-mono text-ink-800 dark:text-cream-100"
-      />
+      <div className="overflow-hidden rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50">
+        <CodeMirror
+          value={code}
+          height="320px"
+          theme={dark ? 'dark' : 'light'}
+          extensions={[python(), keymap.of([indentWithTab])]}
+          onChange={(value) => setCode(value)}
+          basicSetup={{
+            lineNumbers: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            indentOnInput: true,
+            autocompletion: true,
+            foldGutter: true,
+            highlightActiveLine: true,
+            tabSize: 4,
+          }}
+          className="text-[13px] font-mono leading-relaxed"
+        />
+      </div>
 
       {error && (
         <p className="mt-3 text-sm font-body text-status-error whitespace-pre-wrap">{error}</p>
