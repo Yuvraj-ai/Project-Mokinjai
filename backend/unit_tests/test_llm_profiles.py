@@ -4,11 +4,12 @@ A provider failure still persists a failed row and returns the provider error.
 A missing context window on an unknown model does not persist anything.
 """
 
+import httpx
 import pytest
 from cryptography.fernet import Fernet
 
 from app.config import get_settings
-from app.services.llm_probe import LlmProbeError
+from app.services.llm_probe import LlmProbeError, probe_llm
 
 
 @pytest.fixture
@@ -125,3 +126,63 @@ async def test_passing_probe_saves_verified_profile(
         headers=auth_headers,
     )
     assert usable.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_probe_llm_timeout_raises_llm_probe_error(monkeypatch):
+    async def fake_send(*args, **kwargs):
+        raise httpx.ReadTimeout("Request timed out")
+
+    monkeypatch.setattr("app.services.llm_probe._send", fake_send)
+
+    with pytest.raises(LlmProbeError) as exc_info:
+        await probe_llm(
+            provider="openai",
+            model_id="gpt-4o",
+            api_key="test-key",
+            base_url=None,
+        )
+
+    assert "Request timed out after 120s" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_probe_llm_connect_error_raises_llm_probe_error(monkeypatch):
+    async def fake_send(*args, **kwargs):
+        raise httpx.ConnectError("Connection refused")
+
+    monkeypatch.setattr("app.services.llm_probe._send", fake_send)
+
+    with pytest.raises(LlmProbeError) as exc_info:
+        await probe_llm(
+            provider="openai",
+            model_id="gpt-4o",
+            api_key="test-key",
+            base_url=None,
+        )
+
+    assert "Connection failed: Connection refused" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_router_handles_probe_timeout_as_failed_profile(
+    client, auth_headers, test_workspace, encryption_key, monkeypatch
+):
+    async def timeout_probe(*args, **kwargs):
+        raise httpx.ReadTimeout("Request timed out")
+
+    monkeypatch.setattr("app.services.llm_probe._send", timeout_probe)
+    monkeypatch.setattr("app.routers.llm_profiles.lookup_max_input_tokens", lambda provider, model_id: 128000)
+
+    response = await client.post(
+        f"/api/workspaces/{test_workspace.id}/llm-profiles/test",
+        json=_body(),
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "failed"
+    assert body["usable"] is False
+    assert "timed out after 120s" in body["last_error"]
+

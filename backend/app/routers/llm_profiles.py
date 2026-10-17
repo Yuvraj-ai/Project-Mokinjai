@@ -101,6 +101,10 @@ async def _run_test(
     except LlmProbeError as exc:
         status = "failed"
         last_error = str(exc)
+    except Exception as exc:
+        logger.exception("Unexpected error during LLM probe")
+        status = "failed"
+        last_error = f"Probe error: {str(exc).strip().replace(chr(10), ' ') or exc.__class__.__name__}"
 
     ciphertext = encrypt_api_key(api_key)
     profile = existing or LlmProfile(workspace_id=workspace_id)

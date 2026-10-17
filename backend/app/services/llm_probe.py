@@ -2,7 +2,7 @@
 
 import httpx
 
-_TIMEOUT = 20.0
+_TIMEOUT = 120.0
 
 
 class LlmProbeError(Exception):
@@ -16,8 +16,17 @@ async def probe_llm(
     api_key: str,
     base_url: str | None,
 ) -> None:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await _send(client, provider, model_id, api_key, base_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _send(client, provider, model_id, api_key, base_url)
+    except httpx.TimeoutException as exc:
+        raise LlmProbeError(f"Request timed out after {_TIMEOUT:.0f}s") from exc
+    except httpx.RequestError as exc:
+        detail = str(exc).strip().replace("\n", " ") or exc.__class__.__name__
+        if len(detail) > 500:
+            detail = detail[:500] + "…"
+        raise LlmProbeError(f"Connection failed: {detail}") from exc
+
     if response.status_code >= 400:
         detail = response.text.strip().replace("\n", " ")
         if len(detail) > 500:
