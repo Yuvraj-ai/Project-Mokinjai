@@ -1,0 +1,35 @@
+# The sandbox image (ADR-010). Built once, before the first run:
+#
+#   docker build -f docker/Dockerfile.sandbox -t mokinjay-sandbox:1 .
+#
+# The libraries are installed here, at build time, rather than by a `pip install` at
+# container start. A start-time install would need the network, and ADR-010 runs the
+# container with `--network none` — a flag that cannot be dropped mid-life, so
+# "install with a network, then remove it" is not expressible in one `docker run`. It
+# would also put PyPI on the critical path of every run's first execution.
+#
+# The libraries are not version-pinned. The image *tag* is the pin: it is built once,
+# deliberately, and deployed by tag, so a rebuild is a decision rather than a side
+# effect of when a run happened.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir \
+      pandas \
+      openpyxl \
+      python-docx \
+      pypdf
+
+# The kernel is baked in, so the container needs no mounted code and no network. This
+# is the same file the subprocess fallback runs, so there is one implementation of
+# "what it means to execute code".
+COPY backend/app/services/sandbox/kernel.py /app/kernel.py
+
+# The mount targets exist before the mounts do. /app/ipc carries the kernel socket,
+# /app/data is the read-only knowledge-base mount, and /app/work and /app/output are
+# the writable tmpfs mounts.
+RUN mkdir -p /app/data /app/work /app/output /app/ipc
+
+# No entrypoint: the backend's `docker run` supplies the command (`sleep <max_run>`),
+# which is what makes the container bound its own lifetime.
+ENTRYPOINT []
+CMD ["sleep", "infinity"]

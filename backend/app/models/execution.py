@@ -27,8 +27,8 @@ class Execution(Base):
     execution_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workflow = relationship("Workflow", back_populates="executions")

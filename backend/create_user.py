@@ -22,16 +22,19 @@ def create_user(name: str, email: str, password: str, admin: bool = False):
     """Create a user in the database."""
     from sqlalchemy import select
 
-    from app.database import engine, async_session, Base
+    from app.database import async_session
     from app.models.user import User
+    from app.services.seed import assert_schema_present
     from app.utils.security import hash_password
 
     async def _do_create():
-        async with engine.begin() as conn:
-            # Create tables if they don't exist yet
-            await conn.run_sync(Base.metadata.create_all)
-
         async with async_session() as db:
+            # Migrations are the only schema authority (ADR-022). Building the
+            # schema from the models here would bypass Alembic and leave the
+            # database unable to accept migrations -- a state that looks like it
+            # worked, which is worse than an empty one.
+            await assert_schema_present(db)
+
             result = await db.execute(select(User).where(User.email == email))
             existing = result.scalar_one_or_none()
             if existing:

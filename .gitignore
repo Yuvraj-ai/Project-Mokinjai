@@ -80,6 +80,9 @@ docs/GOD_MODE_PLAN_BACKEND.md
 docs/architecture/unified-memory-setup-for-aiagents.md
 docs/architecture/unified-memory.md
 docs/
+memory.md
 keys.txt
+.superpowers/
 
-.env.example
+# Uploaded files (local storage backend)
+backend/storage/

@@ -68,7 +68,7 @@ def main():
     from app.logging import logger
 
     host = os.getenv("BACKEND_HOST", "0.0.0.0")
-    port = int(os.getenv("BACKEND_PORT", "8000"))
+    port = int(os.getenv("BACKEND_PORT", "8001"))
 
     logger.info(f"Starting Mokinjay backend on {host}:{port}")
     logger.info(f"Docs available at http://localhost:{port}/docs")

@@ -20,7 +20,7 @@ A visual AI agent builder platform where users create, configure, and run AI wor
 |-------|------------|
 | **Frontend** | React 19, TypeScript, Vite 7, React Flow 12, Zustand, TanStack Query, Tailwind CSS 3 |
 | **Backend** | Python, FastAPI, SQLAlchemy 2.0 (async), Pydantic v2, Alembic |
-| **Database** | PostgreSQL 14+ (SQLite for development) |
+| **Database** | PostgreSQL 14+ |
 | **Queue** | Celery + Redis 7+ |
 | **Auth** | JWT (access + refresh tokens) |
 | **LLM** | OpenAI SDK, Anthropic SDK, Google Gemini |
@@ -102,7 +102,9 @@ cp .env.example .env
 # Edit .env to add your API keys:
 #   OPENAI_API_KEY=sk-...
 #   ANTHROPIC_API_KEY=sk-ant-...
-#   JWT_SECRET_KEY=<generate-a-random-secret>
+#   JWT_SECRET_KEY=<python scripts/generate_jwt_secret.py>
+#   LLM_ENCRYPTION_KEY=<python scripts/generate_fernet_key.py>
+#   DATABASE_URL=<your PostgreSQL URL; the built-in default is a local fallback>
 
 # 3. Run everything
 ./run_mokinjay.sh
@@ -150,11 +152,14 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run database migrations
-alembic upgrade head
+# Run database migrations. Both the app and Alembic read DATABASE_URL from the
+# repo-root .env (loaded by absolute path, wherever you invoke them from). If
+# that URL points at a remote host, Alembic refuses to run unless you set
+# ALLOW_REMOTE_MIGRATIONS=1. To migrate a local database explicitly:
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder alembic upgrade head
 
 # Start the API server
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 #### 3. Celery Worker (separate terminal)
@@ -182,16 +187,17 @@ cp .env.example .env
 docker-compose up --build
 ```
 
-This starts all services: PostgreSQL, Redis, Backend (port 8000), Celery worker, Frontend (port 5173).
+This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker, Frontend (port 5173).
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder` | Async PostgreSQL connection |
-| `SYNC_DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/agentbuilder` | Sync connection (for Alembic) |
+| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder` | Async PostgreSQL connection used by both the app and Alembic. The built-in default is only a fallback: this repo's `.env` points it at the hosted Supabase instance (session pooler), which is where the app actually connects. |
+| `TEST_DATABASE_URL` | `postgresql+asyncpg://imyuvi@localhost:5432/mokinjay_test` | Database for the test suite. Must end in `_test` or the suite refuses to start. Read by `conftest.py`, never by the app. |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection |
-| `JWT_SECRET_KEY` | `your-super-secret-key-change-in-production` | JWT signing secret (**change this**) |
+| `JWT_SECRET_KEY` | `your-super-secret-key-change-in-production` | JWT signing secret (**change this**). Mint one with `python scripts/generate_jwt_secret.py`. |
+| `LLM_ENCRYPTION_KEY` | *(empty)* | Fernet key encrypting LLM API keys at rest. **Required to save an LLM profile** — blank makes `crypto.py` raise on first use. Mint one with `python scripts/generate_fernet_key.py` (rotating it makes every stored key undecryptable). |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime |
 | `OPENAI_API_KEY` | *(empty)* | OpenAI API key for Agent nodes |
@@ -220,12 +226,13 @@ This starts all services: PostgreSQL, Redis, Backend (port 8000), Celery worker,
 
 ## API Endpoints
 
-### Auth
+### Auth & Sessions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/auth/login` | Login, returns JWT tokens |
+| `POST` | `/api/auth/login` | Login, returns JWT tokens and creates session |
 | `POST` | `/api/auth/refresh` | Refresh access token |
 | `GET` | `/api/auth/me` | Get current user profile |
+| `POST` | `/api/auth/logout` | Revoke session across HTTP & WebSocket |
 | `POST` | `/api/auth/admin/otp/send` | Send OTP to Telegram |
 | `POST` | `/api/auth/admin/otp/validate` | Validate OTP, return JWT |
 
@@ -235,37 +242,70 @@ This starts all services: PostgreSQL, Redis, Backend (port 8000), Celery worker,
 | `GET/POST` | `/api/workspaces` | List/create workspaces |
 | `GET/PUT/DELETE` | `/api/workspaces/:id` | Get/update/delete workspace |
 
-### Workflows
+### LLM Profiles
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/workspaces/:id/llms` | List LLM profiles (`?usable=true` for verified only) |
+| `POST` | `/api/workspaces/:id/llms/test` | Test connection and save profile (test-as-save) |
+| `GET` | `/api/workspaces/:id/llms/context-window` | Look up model context window |
+| `DELETE` | `/api/workspaces/:id/llms/:id` | Delete LLM profile |
+
+### Structured Outputs
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/structured-outputs` | List/create structured outputs |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/structured-outputs/:id` | Get/update/delete definition (cascade renames) |
+| `POST` | `/api/workspaces/:id/structured-outputs/parse-schema` | Parse raw JSON schema into fields |
+
+### Tools
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/tools` | List (custom + built-in)/create custom tool |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/tools/:id` | Get/update/delete tool (delete blocked if used in skills) |
+
+### Skills
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/skills` | List/create skills (progressive disclosure) |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/skills/:id` | Get/update/delete skill (delete blocked if referenced) |
+
+### Connectors
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/workspaces/:id/connectors/catalog` | List predefined connectors catalog |
+| `GET/POST` | `/api/workspaces/:id/connectors` | List/create connector instances |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/connectors/:id` | Get/update/delete connector instance |
+| `POST` | `/api/workspaces/:id/connectors/:id/test` | Test MCP tool discovery probe |
+
+### Knowledge Base & Storage
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/knowledge-bases` | List/create knowledge bases |
+| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id` | Get/delete knowledge base |
+| `GET/POST` | `/api/workspaces/:id/knowledge-bases/:id/documents` | List/upload document (multipart) |
+| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id/documents/:id` | Get metadata / delete document & storage |
+| `GET` | `/api/workspaces/:id/knowledge-bases/:id/documents/:id/download` | Safe document download |
+| `GET/POST` | `/api/workspaces/:id/external-databases` | List/create external DB connection |
+| `DELETE` | `/api/workspaces/:id/external-databases/:id` | Delete external DB connection |
+
+### Workflows & Executions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET/POST` | `/api/workspaces/:id/workflows` | List/create workflows |
 | `GET/PUT/DELETE` | `/api/workspaces/:id/workflows/:id` | Get/update/delete workflow |
 | `POST` | `/api/workspaces/:id/workflows/:id/execute` | Execute a workflow |
 | `POST` | `/api/workspaces/:id/workflows/:id/publish` | Publish workflow |
-
-### Prompts
-| Method | Endpoint | Description |
-|--------|----------|-------------|
 | `GET/POST` | `/api/workspaces/:id/prompts` | List/create system prompts |
 | `GET/PUT/DELETE` | `/api/workspaces/:id/prompts/:id` | Get/update/delete prompt |
-
-### Executions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
 | `GET` | `/api/workspaces/:id/executions` | List executions |
 | `GET` | `/api/workspaces/:id/executions/:id` | Get execution details + trace |
 | `POST` | `/api/workspaces/:id/executions/:id/cancel` | Cancel running execution |
-
-### Knowledge Base
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET/POST` | `/api/workspaces/:id/knowledge-bases` | List/create knowledge bases |
-| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id` | Get/delete knowledge base |
 
 ### Other
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/health` | Health check |
+| `GET` | `/v1/models` | OpenAI-compatible models fallback stub |
 | `WS` | `/ws/executions/:id` | Real-time execution updates |
 
 ## Architecture

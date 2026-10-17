@@ -19,9 +19,9 @@ class Workflow(Base):
     status: Mapped[str] = mapped_column(String(50), default="draft", index=True)  # draft, published, archived
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
-    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     workspace = relationship("Workspace", back_populates="workflows")
     versions = relationship("WorkflowVersion", back_populates="workflow", cascade="all, delete-orphan")
@@ -39,11 +39,6 @@ class WorkflowVersion(Base):
     flow_definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
     changelog: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workflow = relationship("Workflow", back_populates="versions")
-
-    __table_args__ = (
-        # Unique constraint on workflow_id + version
-        {"sqlite_autoincrement": True},
-    )

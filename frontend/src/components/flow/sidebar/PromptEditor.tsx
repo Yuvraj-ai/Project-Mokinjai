@@ -147,7 +147,12 @@ export default function PromptEditor({ workspaceId, prompt, onClose, onSaved }: 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-ink-400 dark:text-ink-300 px-2 py-1 bg-ink-50 dark:bg-ink-700 rounded">{tokenCount} tokens</span>
+            <span
+              className="text-xs font-mono text-ink-400 dark:text-ink-300 px-2 py-1 bg-ink-50 dark:bg-ink-700 rounded"
+              title="Live estimate while typing. The saved prompt shows the exact tiktoken count."
+            >
+              ~{tokenCount} tokens
+            </span>
             <button onClick={onClose} className="px-3 py-1.5 text-xs font-body font-medium text-ink-500 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-700 rounded-lg transition-colors">Discard</button>
             <button onClick={handleSave} disabled={saving || !name.trim() || !content.trim()}
               className="px-4 py-1.5 text-xs font-body font-medium bg-ink-800 dark:bg-cream-200 text-cream-50 dark:text-ink-800 rounded-lg hover:bg-ink-900 dark:hover:bg-cream-300 disabled:opacity-50 transition-colors">

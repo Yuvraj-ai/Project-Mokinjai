@@ -6,6 +6,8 @@ export interface PromptTemplate {
   name: string
   description?: string
   content: string
+  /** Computed server-side with tiktoken (o200k_base) on every read — never stored. */
+  token_count: number
   created_at: string
   updated_at: string
 }

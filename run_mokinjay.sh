@@ -52,12 +52,11 @@ else
   echo "  PostgreSQL started."
 fi
 
-# Check if agentbuilder database exists
-if ! PGPASSWORD=postgres psql -U postgres -h localhost -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw agentbuilder; then
-  echo "  Creating 'agentbuilder' database..."
-  PGPASSWORD=postgres createdb -U postgres -h localhost agentbuilder
-  echo "  Database created."
-fi
+# No database is provisioned here. The application connects using DATABASE_URL
+# from the repo-root .env — a hosted instance in the current setup — so creating a
+# local database would only produce one the app never touches. The local
+# PostgreSQL started above exists for the test suite, which runs against
+# `mokinjay_test` and refuses any database whose name does not end in `_test`.
 
 # --- Start Redis ---
 echo "[3/6] Checking Redis..."
@@ -100,10 +99,16 @@ if [ ! -f "$PROJECT_DIR/.env" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
   echo "  Created .env from .env.example (edit it to add your API keys)."
 fi
 
-# Run migrations
-echo "  Running database migrations..."
+# Migrations are deliberately NOT run here. The application connects using
+# DATABASE_URL from the repo-root .env, which points at a hosted instance, and
+# Alembic refuses a remote target unless ALLOW_REMOTE_MIGRATIONS=1 is set. That
+# opt-in exists so DDL against a remote database stays a deliberate act rather
+# than a side effect of starting the app. Run migrations yourself when the schema
+# changes:
+#
+#   cd backend && ./venv/bin/python -m alembic upgrade head
+#   (prefix ALLOW_REMOTE_MIGRATIONS=1 when the target is the hosted instance)
 cd "$BACKEND_DIR"
-"$BACKEND_DIR/venv/bin/alembic" upgrade head 2>&1 | tail -1
 
 # --- Setup frontend if needed ---
 echo "[5/6] Setting up frontend..."
@@ -121,9 +126,9 @@ echo ""
 
 # Backend
 cd "$BACKEND_DIR"
-"$BACKEND_DIR/venv/bin/uvicorn" app.main:app --reload --port 8000 &
+"$BACKEND_DIR/venv/bin/uvicorn" app.main:app --reload --port 8001 &
 PIDS+=($!)
-echo "  Backend    -> http://localhost:8000"
+echo "  Backend    -> http://localhost:8001"
 
 # Celery worker
 "$BACKEND_DIR/venv/bin/celery" -A app.workers.celery_app worker --loglevel=warning &

@@ -1,11 +1,20 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+# Resolve .env from the repository root, not the process CWD. pydantic-settings
+# resolves a relative env_file against the CWD, so the same `cd backend` that
+# every documented command uses silently skipped the real .env and fell back to
+# the defaults below. Alembic (backend/alembic/env.py) resolves .env by its own
+# absolute path; both now point at this same repo-root file, so the app and
+# Alembic agree on one database.
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder"
-    SYNC_DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/agentbuilder"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
@@ -20,6 +29,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
 
+
+    # Fernet key for LLM and MCP secrets at rest. Generate with Fernet.generate_key().
+    LLM_ENCRYPTION_KEY: str = ""
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_ADMIN_CHAT_ID: str = ""
@@ -27,12 +39,43 @@ class Settings(BaseSettings):
     # OTP
     OTP_EXPIRY_SECONDS: int = 300
 
+    # Sandbox (ADR-010). These are the limits untrusted code runs under.
+    # SANDBOX_BACKEND is "auto" (prefer Docker, fall back to the subprocess),
+    # "docker" (require Docker — a deployment can refuse to run un-isolated), or
+    # "subprocess" (never touch Docker; what the suite uses where the socket is not
+    # reachable).
+    SANDBOX_BACKEND: str = "auto"
+    SANDBOX_IMAGE: str = "mokinjay-sandbox:1"
+    SANDBOX_DOCKER_BIN: str = "docker"
+    SANDBOX_MEMORY: str = "256m"
+    SANDBOX_CPUS: str = "0.5"
+    SANDBOX_OUTPUT_TMPFS_MB: int = 64
+    SANDBOX_WORK_TMPFS_MB: int = 64
+    SANDBOX_TIMEOUT_SECONDS: float = 30.0
+    SANDBOX_KERNEL_GRACE_SECONDS: float = 10.0
+    SANDBOX_MAX_RUN_SECONDS: int = 1800
+
     # App
     BACKEND_HOST: str = "0.0.0.0"
-    BACKEND_PORT: int = 8000
+    BACKEND_PORT: int = 8001
     FRONTEND_URL: str = "http://localhost:5173"
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    # Object storage (ADR-011). Empty credentials select the filesystem backend; a
+    # complete S3 credential set selects object storage. Resolved by
+    # app/services/storage/__init__.py:get_storage() and read nowhere else, so the
+    # selection rule has exactly one home.
+    STORAGE_LOCAL_PATH: str = str(Path(__file__).resolve().parents[1] / "storage")
+    STORAGE_S3_BUCKET: str = ""
+    STORAGE_S3_ENDPOINT_URL: str = ""
+    STORAGE_S3_REGION: str = "us-east-1"
+    STORAGE_S3_ACCESS_KEY_ID: str = ""
+    STORAGE_S3_SECRET_ACCESS_KEY: str = ""
+
+    # Upload ceiling, enforced while reading the body (Task 5). A handler limit, not a
+    # transport limit: see the spec's section 3.
+    STORAGE_MAX_UPLOAD_BYTES: int = 25 * 1024 * 1024
+
+    model_config = {"env_file": ENV_FILE, "extra": "ignore"}
 
 
 @lru_cache()

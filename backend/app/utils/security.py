@@ -15,15 +15,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict, token_type: str = "access") -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "type": "access"})
+    to_encode.update({"exp": expire, "type": token_type})
     token = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     logger.debug(f"Access token created for sub={data.get('sub')}, expires in {settings.ACCESS_TOKEN_EXPIRE_MINUTES}m")
     return token
 
 
+# UNUSED as of server-side sessions: refresh tokens are now opaque strings recorded
+# in the `sessions` table, not signed JWTs. Kept until nothing references it.
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)

@@ -1,5 +1,15 @@
 # AI Agent Builder - Production Implementation Plan
 
+> [!NOTE]
+> **HISTORICAL / LEGACY DOCUMENT**: This document is the original preliminary design from
+> the initial visual canvas ideation phase (Node.js/Next.js/Express/Prisma stack).
+>
+> For the current production architecture, see:
+> - [`memory.md`](file:///run/media/imyuvi/New%20Volume/mokinjay%20project/memory.md) (Core vision, goals, and constraints)
+> - [`docs/DECISIONS.md`](file:///run/media/imyuvi/New%20Volume/mokinjay%20project/docs/DECISIONS.md) (Architecture Decision Records, ADR-000 to ADR-026)
+> - [`docs/PROJECT_STATUS.md`](file:///run/media/imyuvi/New%20Volume/mokinjay%20project/docs/PROJECT_STATUS.md) (Current phase implementation status)
+> - Current Stack: Python FastAPI, SQLAlchemy (async PostgreSQL), React 19 / Vite / Tailwind v3, Celery, Docker Sandbox.
+
 ## Executive Summary
 
 Build a production-ready visual AI agent builder platform where users can create, configure, and deploy AI agents by connecting modular components through a drag-and-drop interface. Think "Zapier meets LangChain" with a visual canvas.
