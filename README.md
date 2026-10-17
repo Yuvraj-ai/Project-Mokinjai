@@ -226,12 +226,13 @@ This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker,
 
 ## API Endpoints
 
-### Auth
+### Auth & Sessions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/auth/login` | Login, returns JWT tokens |
+| `POST` | `/api/auth/login` | Login, returns JWT tokens and creates session |
 | `POST` | `/api/auth/refresh` | Refresh access token |
 | `GET` | `/api/auth/me` | Get current user profile |
+| `POST` | `/api/auth/logout` | Revoke session across HTTP & WebSocket |
 | `POST` | `/api/auth/admin/otp/send` | Send OTP to Telegram |
 | `POST` | `/api/auth/admin/otp/validate` | Validate OTP, return JWT |
 
@@ -241,37 +242,70 @@ This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker,
 | `GET/POST` | `/api/workspaces` | List/create workspaces |
 | `GET/PUT/DELETE` | `/api/workspaces/:id` | Get/update/delete workspace |
 
-### Workflows
+### LLM Profiles
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/workspaces/:id/llms` | List LLM profiles (`?usable=true` for verified only) |
+| `POST` | `/api/workspaces/:id/llms/test` | Test connection and save profile (test-as-save) |
+| `GET` | `/api/workspaces/:id/llms/context-window` | Look up model context window |
+| `DELETE` | `/api/workspaces/:id/llms/:id` | Delete LLM profile |
+
+### Structured Outputs
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/structured-outputs` | List/create structured outputs |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/structured-outputs/:id` | Get/update/delete definition (cascade renames) |
+| `POST` | `/api/workspaces/:id/structured-outputs/parse-schema` | Parse raw JSON schema into fields |
+
+### Tools
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/tools` | List (custom + built-in)/create custom tool |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/tools/:id` | Get/update/delete tool (delete blocked if used in skills) |
+
+### Skills
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/skills` | List/create skills (progressive disclosure) |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/skills/:id` | Get/update/delete skill (delete blocked if referenced) |
+
+### Connectors
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/workspaces/:id/connectors/catalog` | List predefined connectors catalog |
+| `GET/POST` | `/api/workspaces/:id/connectors` | List/create connector instances |
+| `GET/PUT/DELETE` | `/api/workspaces/:id/connectors/:id` | Get/update/delete connector instance |
+| `POST` | `/api/workspaces/:id/connectors/:id/test` | Test MCP tool discovery probe |
+
+### Knowledge Base & Storage
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/workspaces/:id/knowledge-bases` | List/create knowledge bases |
+| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id` | Get/delete knowledge base |
+| `GET/POST` | `/api/workspaces/:id/knowledge-bases/:id/documents` | List/upload document (multipart) |
+| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id/documents/:id` | Get metadata / delete document & storage |
+| `GET` | `/api/workspaces/:id/knowledge-bases/:id/documents/:id/download` | Safe document download |
+| `GET/POST` | `/api/workspaces/:id/external-databases` | List/create external DB connection |
+| `DELETE` | `/api/workspaces/:id/external-databases/:id` | Delete external DB connection |
+
+### Workflows & Executions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET/POST` | `/api/workspaces/:id/workflows` | List/create workflows |
 | `GET/PUT/DELETE` | `/api/workspaces/:id/workflows/:id` | Get/update/delete workflow |
 | `POST` | `/api/workspaces/:id/workflows/:id/execute` | Execute a workflow |
 | `POST` | `/api/workspaces/:id/workflows/:id/publish` | Publish workflow |
-
-### Prompts
-| Method | Endpoint | Description |
-|--------|----------|-------------|
 | `GET/POST` | `/api/workspaces/:id/prompts` | List/create system prompts |
 | `GET/PUT/DELETE` | `/api/workspaces/:id/prompts/:id` | Get/update/delete prompt |
-
-### Executions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
 | `GET` | `/api/workspaces/:id/executions` | List executions |
 | `GET` | `/api/workspaces/:id/executions/:id` | Get execution details + trace |
 | `POST` | `/api/workspaces/:id/executions/:id/cancel` | Cancel running execution |
-
-### Knowledge Base
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET/POST` | `/api/workspaces/:id/knowledge-bases` | List/create knowledge bases |
-| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id` | Get/delete knowledge base |
 
 ### Other
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/health` | Health check |
+| `GET` | `/v1/models` | OpenAI-compatible models fallback stub |
 | `WS` | `/ws/executions/:id` | Real-time execution updates |
 
 ## Architecture
