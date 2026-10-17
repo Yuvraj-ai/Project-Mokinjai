@@ -12,12 +12,16 @@ from pathlib import Path
 
 # Resolve backend root and ensure .env is loaded
 BACKEND_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BACKEND_DIR.parent
 os.chdir(BACKEND_DIR)
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Try loading .env via dotenv if available
 def load_env():
+    # Check backend/.env first, then repo-root .env
     env_path = BACKEND_DIR / ".env"
+    if not env_path.exists():
+        env_path = REPO_ROOT / ".env"
     if not env_path.exists():
         print("[WARN] .env file not found — using config defaults.")
         return
