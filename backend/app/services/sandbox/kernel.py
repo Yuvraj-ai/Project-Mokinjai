@@ -45,7 +45,7 @@ def _on_alarm(signum, frame):
 
 
 class SandboxContext:
-    """The `ctx` injected as a user-defined tool's first argument.
+    """The `ctx` bound into a user-defined tool's execution namespace.
 
     Offline by construction, and that is the resolution of a contradiction in the
     recorded design. The tool design said a tool body runs with a `ctx` giving it

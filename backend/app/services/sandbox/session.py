@@ -292,6 +292,16 @@ class SandboxSession:
         offline, and the capabilities the tool design promised it are host-side tools
         and connectors instead (spec §5).
         """
+        if args is not None and not isinstance(args, dict):
+            return ToolResult(
+                result=None,
+                stdout="",
+                stderr="",
+                error=ErrorInfo(
+                    kind=ErrorKind.INVALID_ARGS.value,
+                    message=f"'args' must be a mapping, not {type(args).__name__}.",
+                ),
+            )
         arguments = dict(args or {})
         if "ctx" in arguments:
             return ToolResult(

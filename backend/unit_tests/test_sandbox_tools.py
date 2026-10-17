@@ -68,6 +68,34 @@ def probe() -> dict:
     }
 '''
 
+READ_NOTE = '''
+def read_note() -> str:
+    """Read a mounted file."""
+    return ctx.read_input("one.txt").decode("utf-8")
+'''
+
+SCRATCH = '''
+def scratch() -> str:
+    """Use work_file and log."""
+    ctx.log("logging from tool")
+    path = ctx.work_file("scratch.txt")
+    with open(path, "w") as f:
+        f.write("saved")
+    return open(path).read()
+'''
+
+SET_LEAK = '''
+def set_leak() -> int:
+    global leaked_var
+    leaked_var = 99
+    return leaked_var
+'''
+
+GET_LEAK = '''
+def get_leak() -> int:
+    return leaked_var
+'''
+
 
 def make_session(tmp_path, sources):
     (tmp_path / "documents").mkdir(exist_ok=True)
@@ -94,6 +122,10 @@ def session(tmp_path):
             "opaque": NOT_JSON,
             "peeking": PEEKING,
             "probe": PROBE,
+            "read_note": READ_NOTE,
+            "scratch": SCRATCH,
+            "set_leak": SET_LEAK,
+            "get_leak": GET_LEAK,
         },
     )
     yield built
@@ -151,6 +183,20 @@ class TestExecuteTool:
 
         assert result.error.kind == ErrorKind.TOOL_NOT_FOUND.value
 
+    def test_non_mapping_args_is_invalid_args(self, session):
+        result = session.execute_tool("add", "not-a-dict")
+
+        assert result.error.kind == ErrorKind.INVALID_ARGS.value
+        assert "mapping" in result.error.message
+
+    def test_namespace_isolation_between_tool_calls(self, session):
+        first = session.execute_tool("set_leak")
+        assert first.result == 99
+
+        second = session.execute_tool("get_leak")
+        assert second.error.kind == ErrorKind.CODE_ERROR.value
+        assert "leaked_var" in second.error.detail
+
 
 class TestTheOfflineContext:
     def test_ctx_lists_the_mounted_knowledge_base_files(self, session):
@@ -190,6 +236,19 @@ class TestTheOfflineContext:
             "has_knowledge_base": False,
             "has_read_input": True,
         }
+
+    def test_ctx_reads_mounted_file_contents(self, session):
+        result = session.execute_tool("read_note")
+
+        assert result.error is None
+        assert result.result == "first"
+
+    def test_ctx_work_file_and_log(self, session):
+        result = session.execute_tool("scratch")
+
+        assert result.error is None
+        assert result.stdout == "logging from tool\n"
+        assert result.result == "saved"
 
     def test_a_source_that_does_not_know_the_name_is_tool_not_found(self, tmp_path):
         source = make_session(tmp_path, {"typo": "def typo(a: int) -> int:\n    return a\n"})
