@@ -126,6 +126,11 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/v1/models", include_in_schema=False)
+async def list_models_stub():
+    return {"object": "list", "data": []}
+
+
 @app.websocket("/ws/executions/{execution_id}")
 async def ws_execution(websocket: WebSocket, execution_id: str):
     logger.info(f"WebSocket connection opened for execution {execution_id}")

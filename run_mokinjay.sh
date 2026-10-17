@@ -126,9 +126,9 @@ echo ""
 
 # Backend
 cd "$BACKEND_DIR"
-"$BACKEND_DIR/venv/bin/uvicorn" app.main:app --reload --port 8000 &
+"$BACKEND_DIR/venv/bin/uvicorn" app.main:app --reload --port 8001 &
 PIDS+=($!)
-echo "  Backend    -> http://localhost:8000"
+echo "  Backend    -> http://localhost:8001"
 
 # Celery worker
 "$BACKEND_DIR/venv/bin/celery" -A app.workers.celery_app worker --loglevel=warning &

@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # App
     BACKEND_HOST: str = "0.0.0.0"
-    BACKEND_PORT: int = 8000
+    BACKEND_PORT: int = 8001
     FRONTEND_URL: str = "http://localhost:5173"
 
     # Object storage (ADR-011). Empty credentials select the filesystem backend; a

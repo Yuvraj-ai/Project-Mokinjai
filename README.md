@@ -159,7 +159,7 @@ pip install -r requirements.txt
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agentbuilder alembic upgrade head
 
 # Start the API server
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 #### 3. Celery Worker (separate terminal)
@@ -187,7 +187,7 @@ cp .env.example .env
 docker-compose up --build
 ```
 
-This starts all services: PostgreSQL, Redis, Backend (port 8000), Celery worker, Frontend (port 5173).
+This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker, Frontend (port 5173).
 
 ## Environment Variables
 
