@@ -86,16 +86,16 @@ class DockerBackend:
                 "exec",
                 "-d",
                 self._container_id,
-                "python",
-                KERNEL_PATH_IN_IMAGE,
-                "--socket",
-                f"{IPC_DIR}/{self._spec.socket_name}",
-                "--data-dir",
-                DATA_DIR,
-                "--work-dir",
-                WORK_DIR,
-                "--output-dir",
-                OUTPUT_DIR,
+                "sh",
+                "-c",
+                (
+                    f"exec python {KERNEL_PATH_IN_IMAGE} "
+                    f"--socket {IPC_DIR}/{self._spec.socket_name} "
+                    f"--data-dir {DATA_DIR} "
+                    f"--work-dir {WORK_DIR} "
+                    f"--output-dir {OUTPUT_DIR} "
+                    f"> {IPC_DIR}/kernel.log 2>&1"
+                ),
             ],
             capture_output=True,
             text=True,
@@ -170,6 +170,7 @@ class DockerBackend:
         staging = os.path.join(self._spec.host_root, "collected")
         shutil.rmtree(staging, ignore_errors=True)
         os.makedirs(staging, exist_ok=True)
+        tar_proc = None
         try:
             tar_proc = subprocess.Popen(
                 [self._docker_bin, "exec", self._container_id, "tar", "-C", OUTPUT_DIR, "-cf", "-", "."],
@@ -181,6 +182,12 @@ class DockerBackend:
             tar_proc.wait(timeout=self._command_timeout)
         except Exception as exc:
             logger.warning(f"Collecting sandbox output failed: {exc}")
+            if tar_proc is not None and tar_proc.poll() is None:
+                try:
+                    tar_proc.kill()
+                    tar_proc.wait(timeout=5)
+                except Exception:
+                    pass
             return []
         return _collect_files(staging)
 
@@ -257,15 +264,27 @@ class DockerBackend:
         return result.returncode == 0 and result.stdout.strip() == "true"
 
     def _container_logs(self) -> str:
-        if self._container_id is None:
-            return ""
-        result = subprocess.run(
-            [self._docker_bin, "logs", "--tail", "40", self._container_id],
-            capture_output=True,
-            text=True,
-            timeout=self._command_timeout,
-        )
-        return (result.stdout + result.stderr).strip()
+        logs = []
+        kernel_log = os.path.join(self._spec.host_ipc_dir, "kernel.log")
+        if os.path.exists(kernel_log):
+            try:
+                with open(kernel_log, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read().strip()
+                    if content:
+                        logs.append(content)
+            except OSError:
+                pass
+        if self._container_id is not None:
+            result = subprocess.run(
+                [self._docker_bin, "logs", "--tail", "40", self._container_id],
+                capture_output=True,
+                text=True,
+                timeout=self._command_timeout,
+            )
+            docker_log = (result.stdout + result.stderr).strip()
+            if docker_log:
+                logs.append(docker_log)
+        return "\n".join(filter(None, logs)).strip()
 
 
 def sweep(docker_bin: str, ttl_seconds: int, *, timeout: float = 30.0) -> int:

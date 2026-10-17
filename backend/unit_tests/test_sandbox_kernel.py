@@ -144,8 +144,22 @@ class TestFailures:
         assert after["stdout"] == "before\n"
 
 
+    def test_timeout_cannot_be_caught_by_guest_broad_exception_handler(self, kernel):
+        code = (
+            "try:\n"
+            "    while True:\n"
+            "        pass\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+        response = kernel.run(code, timeout=0.5)
+
+        assert response["status"] == "timeout"
+        assert response["error_type"] == "DeadlineExceeded"
+
+
 class TestFiles:
-    def test_files_written_to_the_output_directory_are_visible_to_the_host(self, kernel):
+    def test_files_written_outside_the_output_directory_are_not_collected(self, kernel):
         kernel.run("open('/tmp/report.csv', 'w').write('a,b\\n1,2\\n')")
 
         assert kernel.outputs == {}

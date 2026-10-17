@@ -57,6 +57,12 @@ def peeking() -> str:
     return ctx.read_input("../../etc/passwd")
 '''
 
+ROOT_ESCAPE = '''
+def root_escape() -> str:
+    """Try to target root itself with ."""
+    return ctx.write_output(".", b"not allowed")
+'''
+
 PROBE = '''
 def probe() -> dict:
     """Report what the context does and does not have."""
@@ -126,6 +132,7 @@ def session(tmp_path):
             "scratch": SCRATCH,
             "set_leak": SET_LEAK,
             "get_leak": GET_LEAK,
+            "root_escape": ROOT_ESCAPE,
         },
     )
     yield built
@@ -215,6 +222,12 @@ class TestTheOfflineContext:
 
     def test_ctx_refuses_a_path_that_escapes_the_sandbox(self, session):
         result = session.execute_tool("peeking")
+
+        assert result.error.kind == ErrorKind.CODE_ERROR.value
+        assert "escapes" in result.error.message
+
+    def test_ctx_refuses_dot_as_escaping_the_sandbox(self, session):
+        result = session.execute_tool("root_escape")
 
         assert result.error.kind == ErrorKind.CODE_ERROR.value
         assert "escapes" in result.error.message

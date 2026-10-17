@@ -36,7 +36,7 @@ HEADER = struct.Struct("!I")
 MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 
-class DeadlineExceeded(Exception):
+class DeadlineExceeded(BaseException):
     """Raised inside the running job when its time limit expires."""
 
 
@@ -111,7 +111,7 @@ class SandboxContext:
             raise ValueError(f"{name!r} must be a relative path inside the sandbox")
         root = os.path.realpath(root)
         path = os.path.realpath(os.path.join(root, name))
-        if path != root and not path.startswith(root + os.sep):
+        if path == root or not path.startswith(root + os.sep):
             raise ValueError(f"{name!r} escapes the sandbox directory")
         return path
 
@@ -149,7 +149,10 @@ class Kernel:
                             "error_message": str(exc),
                             "traceback": traceback.format_exc(),
                         }
-                    connection.sendall(_frame(json.dumps(reply)))
+                    try:
+                        connection.sendall(_frame(json.dumps(reply)))
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        pass
         finally:
             server.close()
             if os.path.exists(self.socket_path):

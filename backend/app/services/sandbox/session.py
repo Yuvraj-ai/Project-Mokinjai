@@ -156,7 +156,7 @@ class SandboxSession:
                 if backend is not None and self._started:
                     try:
                         backend.stop()
-                    except SandboxError as exc:
+                    except Exception as exc:
                         logger.warning(f"Sandbox teardown failed for run {self._run_id}: {exc}")
             finally:
                 self._started = False
@@ -183,7 +183,12 @@ class SandboxSession:
 
         self._host_root = Path(tempfile.mkdtemp(prefix="mokinjay-sandbox-"))
         try:
-            os.makedirs(self._host_root / "ipc", exist_ok=True)
+            ipc_dir = self._host_root / "ipc"
+            os.makedirs(ipc_dir, exist_ok=True)
+            try:
+                os.chmod(ipc_dir, 0o777)
+            except OSError:
+                pass
             data_dir = self._host_root / "data"
             os.makedirs(data_dir, exist_ok=True)
             # The run's knowledge-base files are staged once and bind-mounted read-only, so
