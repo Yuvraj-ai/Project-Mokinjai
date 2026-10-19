@@ -18,8 +18,11 @@ class Execution(Base):
         String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     workflow_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # pending, running, completed, failed, cancelled
-    trigger_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # manual, api, scheduled, webhook
+    trigger_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # manual, api, scheduled, webhook, chat
     input_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     output_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

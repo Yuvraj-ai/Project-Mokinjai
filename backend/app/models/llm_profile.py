@@ -21,6 +21,8 @@ class LlmProfile(Base):
     encrypted_api_key: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     context_window: Mapped[int] = mapped_column(Integer, nullable=False)
     compaction_at_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Explicit per-model completion ceiling; overrides the LangChain model profile.
+    max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     input_price_per_million: Mapped[float] = mapped_column(nullable=False)
     output_price_per_million: Mapped[float] = mapped_column(nullable=False)
     cache_price_per_million: Mapped[float] = mapped_column(nullable=False)

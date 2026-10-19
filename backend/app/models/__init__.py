@@ -12,6 +12,16 @@ from app.models.tool import Tool
 from app.models.skill import Skill
 from app.models.external_database import ExternalDatabaseConnection
 from app.models.connector import ConnectorInstance
+from app.models.agent import (
+    Agent,
+    AgentConnector,
+    AgentKnowledgeBase,
+    AgentSkill,
+    AgentSubagent,
+    AgentTool,
+)
+from app.models.resource_usage import ResourceUsage
+from app.models.search_credential import SearchCredential
 
 __all__ = [
     "User",
@@ -32,4 +42,12 @@ __all__ = [
     "Skill",
     "ExternalDatabaseConnection",
     "ConnectorInstance",
+    "Agent",
+    "AgentTool",
+    "AgentSkill",
+    "AgentKnowledgeBase",
+    "AgentConnector",
+    "AgentSubagent",
+    "ResourceUsage",
+    "SearchCredential",
 ]

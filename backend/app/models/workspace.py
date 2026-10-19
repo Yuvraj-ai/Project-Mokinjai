@@ -33,6 +33,10 @@ class Workspace(Base):
     connector_instances = relationship(
         "ConnectorInstance", back_populates="workspace", cascade="all, delete-orphan"
     )
+    agents = relationship("Agent", back_populates="workspace", cascade="all, delete-orphan")
+    search_credentials = relationship(
+        "SearchCredential", back_populates="workspace", cascade="all, delete-orphan"
+    )
 
 
 class WorkspaceMember(Base):
