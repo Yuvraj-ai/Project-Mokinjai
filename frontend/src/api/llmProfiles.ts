@@ -11,6 +11,7 @@ export interface LlmProfile {
   base_url: string | null
   context_window: number
   compaction_at_tokens: number
+  max_output_tokens: number | null
   input_price_per_million: number
   output_price_per_million: number
   cache_price_per_million: number
@@ -30,6 +31,7 @@ export interface LlmProfileTestInput {
   base_url?: string | null
   context_window?: number | null
   compaction_at_tokens?: number | null
+  max_output_tokens?: number | null
   input_price_per_million: number
   output_price_per_million: number
   cache_price_per_million: number

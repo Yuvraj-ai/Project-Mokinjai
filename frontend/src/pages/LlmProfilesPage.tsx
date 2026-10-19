@@ -34,6 +34,7 @@ const emptyForm = {
   base_url: '',
   context_window: '',
   compaction_at_tokens: '',
+  max_output_tokens: '',
   input_price_per_million: '',
   output_price_per_million: '',
   cache_price_per_million: '',
@@ -101,6 +102,7 @@ export default function LlmProfilesPage() {
       base_url: profile.base_url || '',
       context_window: String(profile.context_window),
       compaction_at_tokens: String(profile.compaction_at_tokens),
+      max_output_tokens: profile.max_output_tokens ? String(profile.max_output_tokens) : '',
       input_price_per_million: String(profile.input_price_per_million),
       output_price_per_million: String(profile.output_price_per_million),
       cache_price_per_million: String(profile.cache_price_per_million),
@@ -125,6 +127,7 @@ export default function LlmProfilesPage() {
         base_url: form.provider === 'custom' ? form.base_url.trim() : null,
         context_window: knownWindow ? null : Number(form.context_window),
         compaction_at_tokens: form.compaction_at_tokens ? Number(form.compaction_at_tokens) : null,
+        max_output_tokens: form.max_output_tokens ? Number(form.max_output_tokens) : null,
         input_price_per_million: Number(form.input_price_per_million),
         output_price_per_million: Number(form.output_price_per_million),
         cache_price_per_million: Number(form.cache_price_per_million),
@@ -256,6 +259,16 @@ export default function LlmProfilesPage() {
                 className="mt-1 w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-ink-50/30 dark:bg-ink-700/50 px-3 py-2 text-sm text-ink-800 dark:text-cream-100" />
             </label>
             <label className="block text-xs font-body text-ink-400">
+              Max output tokens
+              <input type="number" min={1} value={form.max_output_tokens}
+                onChange={(event) => setField('max_output_tokens', event.target.value)}
+                placeholder="4096 (or the model card)"
+                className="mt-1 w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-ink-50/30 dark:bg-ink-700/50 px-3 py-2 text-sm text-ink-800 dark:text-cream-100" />
+              <span className="mt-1 block text-[10px] text-ink-300">
+                Caps the agent's Max completions. Blank uses the model card, then 4096.
+              </span>
+            </label>
+            <label className="block text-xs font-body text-ink-400">
               Input $ / 1M tokens
               <input type="number" min={0} step="0.0001" value={form.input_price_per_million}
                 onChange={(event) => setField('input_price_per_million', event.target.value)} required
@@ -300,6 +313,7 @@ export default function LlmProfilesPage() {
                   <div className="font-body font-medium text-ink-900 dark:text-cream-100">{profile.name}</div>
                   <div className="text-xs text-ink-400 mt-1">
                     {profile.provider} · {profile.model_id} · {profile.context_window.toLocaleString()} tokens
+                    {profile.max_output_tokens ? ` · max ${profile.max_output_tokens.toLocaleString()} out` : ''}
                   </div>
                 </button>
                 <div className="flex items-center gap-2">
