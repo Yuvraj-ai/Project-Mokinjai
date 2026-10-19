@@ -119,6 +119,9 @@ class AgentOption(BaseModel):
     model_id: str | None = None
     status: str | None = None
     capabilities: AgentCapabilitiesResponse | None = None
+    # Skills only: the picker previews the `@`/`/` closure without a second call.
+    skill_refs: list[str] | None = None
+    tool_refs: list[str] | None = None
 
 
 class AgentChatMessage(BaseModel):
