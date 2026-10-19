@@ -7,22 +7,25 @@ _PROVIDER_SPEC = {
 }
 
 
-def lookup_max_input_tokens(provider: str, model_id: str) -> int | None:
-    """Return the profile window, or None when LangChain has no profile for this id."""
+def lookup_profile(provider: str, model_id: str) -> dict:
+    """Return LangChain's profile dict, or an empty dict when none is known."""
     template = _PROVIDER_SPEC.get(provider)
     if template is None or not model_id.strip():
-        return None
+        return {}
     try:
         from langchain.chat_models import init_chat_model
 
         model = init_chat_model(template.format(model_id=model_id), api_key="profile-lookup")
         profile = getattr(model, "profile", None)
-        if not isinstance(profile, dict):
-            return None
-        value = profile.get("max_input_tokens")
-        return int(value) if value else None
+        return dict(profile) if isinstance(profile, dict) else {}
     except Exception:
-        return None
+        return {}
+
+
+def lookup_max_input_tokens(provider: str, model_id: str) -> int | None:
+    """Return the profile window, or None when LangChain has no profile for this id."""
+    value = lookup_profile(provider, model_id).get("max_input_tokens")
+    return int(value) if value else None
 
 
 def default_compaction_tokens(context_window: int) -> int:
