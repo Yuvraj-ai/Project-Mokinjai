@@ -547,3 +547,49 @@ async def test_chat_rejects_an_empty_conversation(
         headers=auth_headers,
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_options_expose_skill_references_for_the_picker(
+    client, test_workspace, auth_headers, profile, db_session
+):
+    skill = Skill(
+        workspace_id=test_workspace.id,
+        name="Outer",
+        description="Uses others",
+        content="Use /tool_a and @Inner.",
+    )
+    db_session.add(skill)
+    await db_session.commit()
+
+    response = await client.get(f"{url(test_workspace.id)}/options", headers=auth_headers)
+    assert response.status_code == 200
+    skill_option = response.json()["skills"][0]
+    assert skill_option["skill_refs"] == ["Inner"]
+    assert skill_option["tool_refs"] == ["tool_a"]
+
+
+@pytest.mark.asyncio
+async def test_a_tool_that_cannot_describe_itself_needs_attention(
+    client, test_workspace, auth_headers, profile, db_session
+):
+    tool = Tool(
+        workspace_id=test_workspace.id,
+        name="tool_undocumented",
+        code="def tool_undocumented(value):\n    return value\n",
+    )
+    db_session.add(tool)
+    await db_session.commit()
+
+    created = await client.post(
+        url(test_workspace.id),
+        json=payload(profile.id, tool_ids=[tool.id]),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["status"] == "needs_attention"
+    assert any("tool_undocumented" in issue for issue in body["issues"])
+
+    listed = await client.get(url(test_workspace.id), headers=auth_headers)
+    assert listed.json()["agents"][0]["status"] == "needs_attention"

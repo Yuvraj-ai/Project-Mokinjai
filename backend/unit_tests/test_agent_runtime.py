@@ -168,6 +168,39 @@ class TestToolBuilding:
 
         assert set(names) == {"weather", "current_time", "read_skill", "knowledge_search"}
 
+    @pytest.mark.asyncio
+    async def test_a_provider_native_search_spec_survives_tool_dedupe(
+        self, db_session, test_workspace
+    ):
+        profile = make_profile(test_workspace.id)
+        db_session.add(profile)
+        await db_session.commit()
+        await db_session.refresh(profile)
+
+        validated = await validate_agent(
+            db_session,
+            test_workspace.id,
+            AgentInput(
+                name="Searcher",
+                description=None,
+                llm_profile_id=profile.id,
+                system_prompt="Search when needed.",
+                source_prompt_id=None,
+                params={},
+                structured_output_id=None,
+                web_search={"enabled": True, "method": "native"},
+                skill_ids=[],
+                tool_ids=[],
+                knowledge_base_ids=[],
+            ),
+            agent_id=None,
+        )
+        session = SandboxSession(tools=InMemoryToolSource({}))
+
+        tools = await build_tools(db_session, test_workspace.id, validated, session, depth=0)
+
+        assert {"type": "web_search"} in tools
+
 
 class TestCost:
     def test_cache_reads_are_priced_separately(self, encryption_key):

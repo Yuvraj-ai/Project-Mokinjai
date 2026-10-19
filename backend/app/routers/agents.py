@@ -53,12 +53,13 @@ from app.services.agent_composition import (
 from app.services.agent_dependencies import effective_tool_names, resolve_skills
 from app.services.agent_validation import AgentValidationError, normalise_params
 from app.services.agent_runtime import stream_chat
-from app.services.skill import SkillDefinition, SkillError
+from app.services.skill import SkillDefinition, SkillError, extract_references
 from app.services.structured_output import (
     Definition,
     StructuredOutputError,
     compile_schema,
 )
+from app.services.tool_schema import extract_schema, extraction_error
 from app.utils.errors import ConflictException, NotFoundException
 
 router = APIRouter()
@@ -286,6 +287,13 @@ async def _to_response(
         resolved_skills.tool_names if resolved_skills else (),
         [row.name for row in direct_tools],
     )
+    for name in tool_names:
+        row = workspace_tools.get(name.lower())
+        if row is None:
+            continue
+        extracted = extract_schema(row.code)
+        if extracted.schema is None:
+            issues.append(extraction_error(row.name, extracted))
 
     resolved = ResolvedDependencies(
         skills=[
@@ -432,11 +440,22 @@ async def agent_options(
         agents_query = agents_query.where(Agent.id != agent_id)
     agents = list((await db.execute(agents_query)).scalars().all())
 
-    from app.services.tool_schema import extract_schema
-
     def tool_description(code: str) -> str | None:
         extracted = extract_schema(code)
         return extracted.schema.description if extracted.schema else None
+
+    skill_options = []
+    for row in skills:
+        references = extract_references(row.content)
+        skill_options.append(
+            AgentOption(
+                id=row.id,
+                name=row.name,
+                description=row.description,
+                skill_refs=references.skill_refs,
+                tool_refs=references.tool_refs,
+            )
+        )
 
     return AgentOptionsResponse(
         llm_profiles=[
@@ -453,9 +472,7 @@ async def agent_options(
         structured_outputs=[
             AgentOption(id=row.id, name=row.name, description=row.description) for row in outputs
         ],
-        skills=[
-            AgentOption(id=row.id, name=row.name, description=row.description) for row in skills
-        ],
+        skills=skill_options,
         knowledge_bases=[AgentOption(id=row.id, name=row.name) for row in knowledge_bases],
         connectors=[
             AgentOption(id=row.id, name=row.name, status=row.status) for row in connectors
@@ -478,27 +495,28 @@ async def list_agents(
 ):
     rows = (
         await db.execute(
-            select(Agent, LlmProfile.status)
-            .outerjoin(LlmProfile, LlmProfile.id == Agent.llm_profile_id)
+            select(Agent)
             .where(Agent.workspace_id == workspace_id)
             .order_by(Agent.updated_at.desc())
         )
-    ).all()
-    items = [
-        AgentListItem(
-            id=agent.id,
-            name=agent.name,
-            description=agent.description,
-            llm_profile_id=agent.llm_profile_id,
-            status=(
-                "ready"
-                if agent.llm_profile_id and profile_status == "verified"
-                else "needs_attention"
-            ),
-            updated_at=agent.updated_at,
+    ).scalars().all()
+
+    # shortcut: the badge asks `_to_response` so it can never disagree with the
+    # detail view, at the cost of one pass of queries per agent. Paginate or move
+    # the checks into one query if a workspace ever holds hundreds of agents.
+    items = []
+    for agent in rows:
+        status = (await _to_response(db, agent)).status
+        items.append(
+            AgentListItem(
+                id=agent.id,
+                name=agent.name,
+                description=agent.description,
+                llm_profile_id=agent.llm_profile_id,
+                status=status,
+                updated_at=agent.updated_at,
+            )
         )
-        for agent, profile_status in rows
-    ]
     return AgentListResponse(agents=items, total=len(items))
 
 

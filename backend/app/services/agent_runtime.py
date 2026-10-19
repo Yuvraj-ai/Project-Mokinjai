@@ -48,7 +48,7 @@ from app.services.agent_tools import (
 )
 from app.services.connector_runtime import load_connector_tools
 from app.services.sandbox import InMemoryToolSource, SandboxConfig, SandboxSession
-from app.services.tool_schema import extract_schema
+from app.services.tool_schema import extract_schema, extraction_error
 from app.services.web_search import build_web_search_tool, native_web_search_spec
 from app.tools.registry import list_builtin_tools
 
@@ -125,9 +125,7 @@ async def build_tools(
         if row is not None:
             extracted = extract_schema(row.code)
             if extracted.schema is None:
-                raise AgentRuntimeError(
-                    f"tool {row.name!r} no longer describes itself: " + " ".join(extracted.errors)
-                )
+                raise AgentRuntimeError(extraction_error(row.name, extracted))
             tools.append(user_tool(extracted.schema, session))
             continue
         entry = builtins.get(name.lower())
@@ -184,7 +182,11 @@ async def build_tools(
     unique: list[BaseTool | dict[str, Any]] = []
     seen: set[str] = set()
     for tool in tools:
-        name = tool["name"] if isinstance(tool, dict) else tool.name
+        if isinstance(tool, dict):
+            # Provider-native specs (e.g. {"type": "web_search"}) have no common name.
+            unique.append(tool)
+            continue
+        name = tool.name
         if name in seen:
             logger.warning(f"Skipping duplicate tool name {name!r} for agent run")
             continue

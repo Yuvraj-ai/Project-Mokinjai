@@ -32,6 +32,11 @@ class ExtractionResult:
     errors: list[str]
 
 
+def extraction_error(name: str, result: ExtractionResult) -> str:
+    """The one wording the runtime error and an agent's issues list both use."""
+    return f"tool {name!r} no longer describes itself: " + " ".join(result.errors)
+
+
 MAX_NAME_LENGTH = 64
 
 # A docstring section header. The summary stops here even when the author left no
