@@ -121,6 +121,15 @@ class AgentOption(BaseModel):
     capabilities: AgentCapabilitiesResponse | None = None
 
 
+class AgentChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=32_000)
+
+
+class AgentChatRequest(BaseModel):
+    messages: list[AgentChatMessage] = Field(min_length=1, max_length=200)
+
+
 class AgentOptionsResponse(BaseModel):
     llm_profiles: list[AgentOption] = Field(default_factory=list)
     structured_outputs: list[AgentOption] = Field(default_factory=list)

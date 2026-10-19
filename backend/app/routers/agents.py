@@ -1,4 +1,8 @@
+import json
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +19,7 @@ from app.models.agent import (
     AgentTool,
 )
 from app.models.connector import ConnectorInstance
+from app.models.execution import Execution
 from app.models.knowledge import KnowledgeBase
 from app.models.llm_profile import LlmProfile
 from app.models.resource_usage import ResourceUsage, bump_usage
@@ -26,6 +31,7 @@ from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.schemas.agent import (
     AgentCapabilitiesResponse,
+    AgentChatRequest,
     AgentListItem,
     AgentListResponse,
     AgentOption,
@@ -41,10 +47,12 @@ from app.services.agent_composition import (
     AgentInput,
     CompositionError,
     assert_name_is_free,
+    join_ids,
     validate_agent,
 )
 from app.services.agent_dependencies import effective_tool_names, resolve_skills
 from app.services.agent_validation import AgentValidationError, normalise_params
+from app.services.agent_runtime import stream_chat
 from app.services.skill import SkillDefinition, SkillError
 from app.services.structured_output import (
     Definition,
@@ -54,6 +62,14 @@ from app.services.structured_output import (
 from app.utils.errors import ConflictException, NotFoundException
 
 router = APIRouter()
+
+
+def _sse(events):
+    async def generate():
+        async for event in events:
+            yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+
+    return generate()
 
 
 def _input(request: AgentWriteRequest) -> AgentInput:
@@ -96,38 +112,7 @@ async def _load_agent(db: AsyncSession, workspace_id: str, agent_id: str) -> Age
 
 
 async def _join_ids(db: AsyncSession, agent_id: str) -> dict[str, list[str]]:
-    skills = (
-        await db.execute(select(AgentSkill.skill_id).where(AgentSkill.agent_id == agent_id))
-    ).scalars().all()
-    tools = (
-        await db.execute(select(AgentTool.tool_id).where(AgentTool.agent_id == agent_id))
-    ).scalars().all()
-    knowledge_bases = (
-        await db.execute(
-            select(AgentKnowledgeBase.knowledge_base_id).where(
-                AgentKnowledgeBase.agent_id == agent_id
-            )
-        )
-    ).scalars().all()
-    connectors = (
-        await db.execute(
-            select(AgentConnector.connector_instance_id).where(
-                AgentConnector.agent_id == agent_id
-            )
-        )
-    ).scalars().all()
-    subagents = (
-        await db.execute(
-            select(AgentSubagent.subagent_id).where(AgentSubagent.agent_id == agent_id)
-        )
-    ).scalars().all()
-    return {
-        "skill_ids": list(skills),
-        "tool_ids": list(tools),
-        "knowledge_base_ids": list(knowledge_bases),
-        "connector_ids": list(connectors),
-        "subagent_ids": list(subagents),
-    }
+    return await join_ids(db, agent_id)
 
 
 def _add_joins(db: AsyncSession, agent_id: str, ids: dict[str, list[str]]) -> None:
@@ -635,3 +620,36 @@ async def delete_agent(
     await db.delete(agent)
     await db.commit()
     return {"success": True}
+
+
+@router.post("/{agent_id}/chat")
+async def chat_with_agent(
+    workspace_id: str,
+    agent_id: str,
+    request: AgentChatRequest,
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _load_agent(db, workspace_id, agent_id)
+    messages = [message.model_dump() for message in request.messages]
+    execution = Execution(
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        status="running",
+        trigger_type="chat",
+        input_data={"messages": messages},
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(execution)
+    await db.commit()
+    await db.refresh(execution)
+
+    return StreamingResponse(
+        _sse(stream_chat(workspace_id, agent_id, messages, execution.id)),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

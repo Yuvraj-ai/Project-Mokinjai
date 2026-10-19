@@ -16,7 +16,14 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import Agent, AgentSubagent
+from app.models.agent import (
+    Agent,
+    AgentConnector,
+    AgentKnowledgeBase,
+    AgentSkill,
+    AgentSubagent,
+    AgentTool,
+)
 from app.models.connector import ConnectorInstance
 from app.models.knowledge import KnowledgeBase
 from app.models.llm_profile import LlmProfile
@@ -81,6 +88,7 @@ class ValidatedAgent:
     selected_skills: list[Skill]
     resolved_skills: ResolvedSkills
     direct_tools: list[Tool]
+    workspace_tools: list[Tool]
     effective_tools: tuple[str, ...]
     knowledge_bases: list[KnowledgeBase]
     connectors: list[ConnectorInstance]
@@ -160,7 +168,9 @@ async def validate_agent(
         db, workspace_id, data.structured_output_id, errors
     )
     selected_skills, resolved = await _load_skills(db, workspace_id, data.skill_ids, errors)
-    direct_tools, effective_tools = await _load_tools(db, workspace_id, data.tool_ids, resolved, errors)
+    direct_tools, workspace_tools, effective_tools = await _load_tools(
+        db, workspace_id, data.tool_ids, resolved, errors
+    )
     knowledge_bases = await _load_all(db, KnowledgeBase, workspace_id, data.knowledge_base_ids, "knowledge_base_ids", errors)
     connectors = await _load_all(db, ConnectorInstance, workspace_id, data.connector_ids, "connector_ids", errors)
     subagents = await _load_subagents(db, workspace_id, data.subagent_ids, agent_id, errors)
@@ -185,6 +195,7 @@ async def validate_agent(
         selected_skills=selected_skills,
         resolved_skills=resolved,
         direct_tools=direct_tools,
+        workspace_tools=workspace_tools,
         effective_tools=effective_tools,
         knowledge_bases=knowledge_bases,
         connectors=connectors,
@@ -256,7 +267,7 @@ async def _load_tools(
     tool_ids: list[str],
     resolved: ResolvedSkills,
     errors: list[FieldError],
-) -> tuple[list[Tool], tuple[str, ...]]:
+) -> tuple[list[Tool], list[Tool], tuple[str, ...]]:
     from app.tools import list_builtin_tools
 
     rows = list(
@@ -280,7 +291,7 @@ async def _load_tools(
                 "reference tools that no longer exist: " + ", ".join(sorted(unknown)),
             )
         )
-    return direct, effective
+    return direct, rows, effective
 
 
 async def _load_all(
@@ -365,6 +376,58 @@ async def _load_source_prompt(
     if row is None:
         errors.append(FieldError("source_prompt_id", "does not exist in this workspace"))
     return row
+
+
+async def join_ids(db: AsyncSession, agent_id: str) -> dict[str, list[str]]:
+    """The five composition join tables, as ids."""
+    skills = (
+        await db.execute(select(AgentSkill.skill_id).where(AgentSkill.agent_id == agent_id))
+    ).scalars().all()
+    tools = (
+        await db.execute(select(AgentTool.tool_id).where(AgentTool.agent_id == agent_id))
+    ).scalars().all()
+    knowledge_bases = (
+        await db.execute(
+            select(AgentKnowledgeBase.knowledge_base_id).where(
+                AgentKnowledgeBase.agent_id == agent_id
+            )
+        )
+    ).scalars().all()
+    connectors = (
+        await db.execute(
+            select(AgentConnector.connector_instance_id).where(
+                AgentConnector.agent_id == agent_id
+            )
+        )
+    ).scalars().all()
+    subagents = (
+        await db.execute(
+            select(AgentSubagent.subagent_id).where(AgentSubagent.agent_id == agent_id)
+        )
+    ).scalars().all()
+    return {
+        "skill_ids": list(skills),
+        "tool_ids": list(tools),
+        "knowledge_base_ids": list(knowledge_bases),
+        "connector_ids": list(connectors),
+        "subagent_ids": list(subagents),
+    }
+
+
+async def saved_input(db: AsyncSession, agent: Agent) -> AgentInput:
+    """A saved agent as the same input the form sends, for revalidation at run time."""
+    ids = await join_ids(db, agent.id)
+    return AgentInput(
+        name=agent.name,
+        description=agent.description,
+        llm_profile_id=agent.llm_profile_id or "",
+        system_prompt=agent.system_prompt,
+        source_prompt_id=agent.source_prompt_id,
+        params=dict(agent.params or {}),
+        structured_output_id=agent.structured_output_id,
+        web_search=agent.web_search,
+        **ids,
+    )
 
 
 async def assert_name_is_free(
