@@ -1,4 +1,6 @@
-"""Resolve a model's context window from the installed LangChain profile data."""
+"""Resolve model metadata from the installed LangChain profile data."""
+
+from functools import lru_cache
 
 _PROVIDER_SPEC = {
     "openai": "openai:{model_id}",
@@ -7,8 +9,13 @@ _PROVIDER_SPEC = {
 }
 
 
+@lru_cache(maxsize=256)
 def lookup_profile(provider: str, model_id: str) -> dict:
-    """Return LangChain's profile dict, or an empty dict when none is known."""
+    """Return LangChain's profile dict, or an empty dict when none is known.
+
+    Cached per process: constructing a model is cheap but reading its profile can
+    reach models.dev, and the same few models are asked about on every form load.
+    """
     template = _PROVIDER_SPEC.get(provider)
     if template is None or not model_id.strip():
         return {}

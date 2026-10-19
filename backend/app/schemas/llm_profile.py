@@ -15,6 +15,7 @@ class LlmProfileTestRequest(BaseModel):
     base_url: str | None = None
     context_window: int | None = Field(default=None, gt=0)
     compaction_at_tokens: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
     input_price_per_million: float = Field(ge=0)
     output_price_per_million: float = Field(ge=0)
     cache_price_per_million: float = Field(ge=0)
@@ -30,6 +31,7 @@ class LlmProfileResponse(BaseModel):
     base_url: str | None
     context_window: int
     compaction_at_tokens: int
+    max_output_tokens: int | None
     input_price_per_million: float
     output_price_per_million: float
     cache_price_per_million: float

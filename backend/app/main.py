@@ -17,6 +17,8 @@ from app.routers import (
     tools,
     external_databases,
     connectors,
+    agents,
+    search_credentials,
 )
 from app.websocket.execution_ws import execution_websocket
 from app.services.otp_store import otp_store
@@ -117,6 +119,12 @@ app.include_router(
     connectors.router,
     prefix="/api/workspaces/{workspace_id}/connectors",
     tags=["connectors"],
+)
+app.include_router(agents.router, prefix="/api/workspaces/{workspace_id}/agents", tags=["agents"])
+app.include_router(
+    search_credentials.router,
+    prefix="/api/workspaces/{workspace_id}/search-credentials",
+    tags=["search-credentials"],
 )
 
 

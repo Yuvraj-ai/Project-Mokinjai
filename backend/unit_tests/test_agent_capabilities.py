@@ -16,6 +16,12 @@ from app.services.model_profiles import lookup_profile
 
 
 class TestProfileLookup:
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        lookup_profile.cache_clear()
+        yield
+        lookup_profile.cache_clear()
+
     def test_empty_profile_when_langchain_raises(self, monkeypatch):
         def boom(*args, **kwargs):
             raise RuntimeError("offline")

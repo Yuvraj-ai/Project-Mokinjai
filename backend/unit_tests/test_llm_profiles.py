@@ -186,3 +186,63 @@ async def test_router_handles_probe_timeout_as_failed_profile(
     assert body["usable"] is False
     assert "timed out after 120s" in body["last_error"]
 
+
+@pytest.mark.asyncio
+async def test_max_output_tokens_is_saved_and_cannot_exceed_the_window(
+    client, auth_headers, test_workspace, encryption_key, monkeypatch
+):
+    async def ok_probe(**kwargs):
+        return None
+
+    monkeypatch.setattr("app.routers.llm_profiles.lookup_max_input_tokens", lambda p, m: 1000)
+    monkeypatch.setattr("app.routers.llm_profiles.probe_llm", ok_probe)
+    base = f"/api/workspaces/{test_workspace.id}/llm-profiles/test"
+
+    saved = await client.post(base, json=_body(max_output_tokens=500), headers=auth_headers)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["max_output_tokens"] == 500
+
+    refused = await client.post(base, json=_body(max_output_tokens=1001), headers=auth_headers)
+    assert refused.status_code == 400
+    assert "context window" in refused.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_is_refused_while_an_agent_uses_the_profile(
+    client, auth_headers, test_workspace, db_session
+):
+    from app.models.agent import Agent
+    from app.models.llm_profile import LlmProfile
+
+    profile = LlmProfile(
+        workspace_id=test_workspace.id,
+        name="In use",
+        provider="openai",
+        model_id="gpt-4o",
+        encrypted_api_key=b"ciphertext",
+        context_window=128000,
+        compaction_at_tokens=102400,
+        input_price_per_million=0.0,
+        output_price_per_million=0.0,
+        cache_price_per_million=0.0,
+        status="verified",
+    )
+    db_session.add(profile)
+    await db_session.commit()
+    db_session.add(
+        Agent(
+            workspace_id=test_workspace.id,
+            name="Uses it",
+            llm_profile_id=profile.id,
+            system_prompt="Hi",
+        )
+    )
+    await db_session.commit()
+
+    response = await client.delete(
+        f"/api/workspaces/{test_workspace.id}/llm-profiles/{profile.id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+    assert "Uses it" in response.json()["detail"]
+

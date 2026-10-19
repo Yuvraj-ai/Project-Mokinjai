@@ -8,6 +8,7 @@ from app.logging import logger
 from app.middleware.auth import get_current_user
 from app.middleware.rbac import require_workspace_role
 from app.models.llm_profile import LlmProfile
+from app.models.agent import Agent
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.schemas.llm_profile import (
@@ -18,7 +19,7 @@ from app.schemas.llm_profile import (
 )
 from app.services.llm_probe import LlmProbeError, probe_llm
 from app.services.model_profiles import default_compaction_tokens, lookup_max_input_tokens
-from app.utils.errors import BadRequestException, NotFoundException
+from app.utils.errors import BadRequestException, ConflictException, NotFoundException
 
 router = APIRouter()
 
@@ -33,6 +34,7 @@ def _to_response(profile: LlmProfile) -> LlmProfileResponse:
         base_url=profile.base_url,
         context_window=profile.context_window,
         compaction_at_tokens=profile.compaction_at_tokens,
+        max_output_tokens=profile.max_output_tokens,
         input_price_per_million=profile.input_price_per_million,
         output_price_per_million=profile.output_price_per_million,
         cache_price_per_million=profile.cache_price_per_million,
@@ -82,6 +84,8 @@ async def _run_test(
     compaction = request.compaction_at_tokens or default_compaction_tokens(context_window)
     if compaction > context_window:
         raise BadRequestException("Compaction threshold cannot exceed the context window")
+    if request.max_output_tokens is not None and request.max_output_tokens > context_window:
+        raise BadRequestException("Max output tokens cannot exceed the context window")
 
     api_key = request.api_key.strip()
     if not api_key:
@@ -115,6 +119,7 @@ async def _run_test(
     profile.encrypted_api_key = ciphertext
     profile.context_window = context_window
     profile.compaction_at_tokens = compaction
+    profile.max_output_tokens = request.max_output_tokens
     profile.input_price_per_million = request.input_price_per_million
     profile.output_price_per_million = request.output_price_per_million
     profile.cache_price_per_million = request.cache_price_per_million
@@ -193,6 +198,18 @@ async def delete_llm_profile(
     db: AsyncSession = Depends(get_db),
 ):
     profile = await _load_profile(db, workspace_id, profile_id)
+    referrers = (
+        await db.execute(
+            select(Agent.name).where(
+                Agent.llm_profile_id == profile_id,
+                Agent.workspace_id == workspace_id,
+            )
+        )
+    ).scalars().all()
+    if referrers:
+        raise ConflictException(
+            "This profile is used by: " + ", ".join(sorted(referrers))
+        )
     await db.delete(profile)
     await db.commit()
     return {"success": True}
