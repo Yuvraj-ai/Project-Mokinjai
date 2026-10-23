@@ -19,13 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import (
     Agent,
     AgentConnector,
-    AgentKnowledgeBase,
+    AgentDocument,
     AgentSkill,
     AgentSubagent,
     AgentTool,
 )
 from app.models.connector import ConnectorInstance
-from app.models.knowledge import KnowledgeBase
+from app.models.knowledge import Document, FileFolder
 from app.models.llm_profile import LlmProfile
 from app.models.prompt import PromptTemplate
 from app.models.search_credential import SearchCredential
@@ -61,6 +61,14 @@ class CompositionError(Exception):
 
 
 @dataclass(frozen=True)
+class FolderRule:
+    """A folder the user ticked, plus the files inside it they unticked."""
+
+    id: str
+    exclude_document_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class AgentInput:
     name: str
     description: str | None
@@ -72,7 +80,8 @@ class AgentInput:
     web_search: dict[str, Any] | None
     skill_ids: list[str] = field(default_factory=list)
     tool_ids: list[str] = field(default_factory=list)
-    knowledge_base_ids: list[str] = field(default_factory=list)
+    folders: list[FolderRule] = field(default_factory=list)
+    documents: list[str] = field(default_factory=list)
     connector_ids: list[str] = field(default_factory=list)
     subagent_ids: list[str] = field(default_factory=list)
 
@@ -90,7 +99,8 @@ class ValidatedAgent:
     direct_tools: list[Tool]
     workspace_tools: list[Tool]
     effective_tools: tuple[str, ...]
-    knowledge_bases: list[KnowledgeBase]
+    attached_documents: list[Document]
+    attachment_sources: dict[str, str | None]
     connectors: list[ConnectorInstance]
     subagents: list[Agent]
     source_prompt: PromptTemplate | None
@@ -171,7 +181,9 @@ async def validate_agent(
     direct_tools, workspace_tools, effective_tools = await _load_tools(
         db, workspace_id, data.tool_ids, resolved, errors
     )
-    knowledge_bases = await _load_all(db, KnowledgeBase, workspace_id, data.knowledge_base_ids, "knowledge_base_ids", errors)
+    attached_documents, attachment_sources = await _load_attachments(
+        db, workspace_id, data.folders, data.documents, errors
+    )
     connectors = await _load_all(db, ConnectorInstance, workspace_id, data.connector_ids, "connector_ids", errors)
     subagents = await _load_subagents(db, workspace_id, data.subagent_ids, agent_id, errors)
     source_prompt = await _load_source_prompt(db, workspace_id, data.source_prompt_id, errors)
@@ -197,11 +209,79 @@ async def validate_agent(
         direct_tools=direct_tools,
         workspace_tools=workspace_tools,
         effective_tools=effective_tools,
-        knowledge_bases=knowledge_bases,
+        attached_documents=attached_documents,
+        attachment_sources=attachment_sources,
         connectors=connectors,
         subagents=subagents,
         source_prompt=source_prompt,
     )
+
+
+async def _load_attachments(
+    db: AsyncSession,
+    workspace_id: str,
+    folders: list[FolderRule],
+    document_ids: list[str],
+    errors: list[FieldError],
+) -> tuple[list[Document], dict[str, str | None]]:
+    """Expand folder rules into one resolved file set.
+
+    Folder order wins over direct ids: a file reached through a folder keeps that
+    folder as its source, so the picker can group it. A stale exclusion naming a file
+    that is no longer in the folder is ignored, not an error.
+    """
+    folder_ids = [rule.id for rule in folders]
+    if folder_ids:
+        folder_rows = list(
+            (
+                await db.execute(
+                    select(FileFolder).where(
+                        FileFolder.workspace_id == workspace_id,
+                        FileFolder.id.in_(folder_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        known_folders = {row.id for row in folder_rows}
+        if missing := [folder_id for folder_id in folder_ids if folder_id not in known_folders]:
+            errors.append(FieldError("folders", "does not exist in this workspace"))
+            return [], {}
+
+    # One query for the workspace: the library is small, and this keeps every id check
+    # inside the workspace by construction.
+    rows = list(
+        (
+            await db.execute(
+                select(Document)
+                .where(Document.workspace_id == workspace_id)
+                .order_by(Document.created_at, Document.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_id = {row.id: row for row in rows}
+    if missing := [document_id for document_id in document_ids if document_id not in by_id]:
+        errors.append(FieldError("documents", "does not exist in this workspace"))
+        return [], {}
+
+    resolved: list[Document] = []
+    sources: dict[str, str | None] = {}
+    for rule in folders:
+        excluded = set(rule.exclude_document_ids)
+        for row in rows:
+            if row.folder_id != rule.id or row.id in excluded or row.id in sources:
+                continue
+            sources[row.id] = rule.id
+            resolved.append(row)
+    for document_id in document_ids:
+        if document_id in sources:
+            continue
+        sources[document_id] = None
+        resolved.append(by_id[document_id])
+    return resolved, sources
 
 
 async def _load_structured_output(
@@ -378,19 +458,28 @@ async def _load_source_prompt(
     return row
 
 
+async def attachment_rows(db: AsyncSession, agent_id: str) -> list[tuple[Document, str | None]]:
+    """The agent's files and the folder each was attached through, for the response."""
+    rows = await db.execute(
+        select(Document, AgentDocument.source_folder_id)
+        .join(AgentDocument, AgentDocument.document_id == Document.id)
+        .where(AgentDocument.agent_id == agent_id)
+        .order_by(AgentDocument.created_at, AgentDocument.document_id)
+    )
+    return list(rows.all())
+
+
 async def join_ids(db: AsyncSession, agent_id: str) -> dict[str, list[str]]:
-    """The five composition join tables, as ids."""
+    """The four id-only composition join tables."""
     skills = (
         await db.execute(select(AgentSkill.skill_id).where(AgentSkill.agent_id == agent_id))
     ).scalars().all()
     tools = (
         await db.execute(select(AgentTool.tool_id).where(AgentTool.agent_id == agent_id))
     ).scalars().all()
-    knowledge_bases = (
+    documents = (
         await db.execute(
-            select(AgentKnowledgeBase.knowledge_base_id).where(
-                AgentKnowledgeBase.agent_id == agent_id
-            )
+            select(AgentDocument.document_id).where(AgentDocument.agent_id == agent_id)
         )
     ).scalars().all()
     connectors = (
@@ -408,7 +497,7 @@ async def join_ids(db: AsyncSession, agent_id: str) -> dict[str, list[str]]:
     return {
         "skill_ids": list(skills),
         "tool_ids": list(tools),
-        "knowledge_base_ids": list(knowledge_bases),
+        "documents": list(documents),
         "connector_ids": list(connectors),
         "subagent_ids": list(subagents),
     }

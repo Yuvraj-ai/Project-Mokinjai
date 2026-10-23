@@ -16,32 +16,40 @@ DOCUMENT_STATUS_FAILED = "failed"
 DOCUMENT_STATUSES = (DOCUMENT_STATUS_STORED, DOCUMENT_STATUS_INDEXED, DOCUMENT_STATUS_FAILED)
 
 
-class KnowledgeBase(Base):
-    __tablename__ = "knowledge_bases"
+class FileFolder(Base):
+    """One level of grouping over the workspace-wide file library.
+
+    A folder holds files, never other folders (spec, "Folder depth: level 1 now").
+    """
+
+    __tablename__ = "file_folders"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     workspace_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Only "document" is supported. "url" and "api" have no design and are refused by the
-    # router; the column stays String(50) so widening the set again needs no migration.
-    type: Mapped[str] = mapped_column(String(50), nullable=False)  # document
-    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    workspace = relationship("Workspace", back_populates="knowledge_bases")
-    documents = relationship("Document", back_populates="knowledge_base", cascade="all, delete-orphan")
+    workspace = relationship("Workspace", back_populates="file_folders")
+    # No delete cascade and no FK nulling: the database RESTRICT and the folder-delete
+    # service are the only paths that may remove a file, so a stray `db.delete(folder)`
+    # fails loudly instead of destroying bytes (or silently orphaning them at the root).
+    documents = relationship("Document", back_populates="folder", passive_deletes=True)
 
 
 class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    knowledge_base_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False, index=True
+    # Required even for a folderless file: a root file has no folder to derive the
+    # workspace from, and every read must be scoped.
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    folder_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("file_folders.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # The object-storage KEY from app.services.storage.build_storage_key — not a URL, not
@@ -50,7 +58,7 @@ class Document(Base):
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # SEAM: never written. Text extraction belongs to the Phase 2 Docker sandbox
-    # (ADR-010) — see the SEAM note in app/routers/knowledge.py, which names the spec
+    # (ADR-010) — see the SEAM note in app/routers/files.py, which names the spec
     # where this resumes.
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Server-written provenance from the upload path: original_filename, uploaded_by,
@@ -68,4 +76,4 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    knowledge_base = relationship("KnowledgeBase", back_populates="documents")
+    folder = relationship("FileFolder", back_populates="documents")

@@ -2,7 +2,7 @@ from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
 from app.models.workflow import Workflow, WorkflowVersion
 from app.models.execution import Execution
-from app.models.knowledge import KnowledgeBase, Document
+from app.models.knowledge import FileFolder, Document
 from app.models.api_key import ApiKey, AuditLog
 from app.models.prompt import PromptTemplate
 from app.models.llm_profile import LlmProfile
@@ -15,7 +15,7 @@ from app.models.connector import ConnectorInstance
 from app.models.agent import (
     Agent,
     AgentConnector,
-    AgentKnowledgeBase,
+    AgentDocument,
     AgentSkill,
     AgentSubagent,
     AgentTool,
@@ -30,7 +30,7 @@ __all__ = [
     "Workflow",
     "WorkflowVersion",
     "Execution",
-    "KnowledgeBase",
+    "FileFolder",
     "Document",
     "ApiKey",
     "AuditLog",
@@ -45,7 +45,7 @@ __all__ = [
     "Agent",
     "AgentTool",
     "AgentSkill",
-    "AgentKnowledgeBase",
+    "AgentDocument",
     "AgentConnector",
     "AgentSubagent",
     "ResourceUsage",

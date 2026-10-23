@@ -73,7 +73,7 @@ class Settings(BaseSettings):
 
     # Upload ceiling, enforced while reading the body (Task 5). A handler limit, not a
     # transport limit: see the spec's section 3.
-    STORAGE_MAX_UPLOAD_BYTES: int = 25 * 1024 * 1024
+    STORAGE_MAX_UPLOAD_BYTES: int = 95 * 1024 * 1024
 
     model_config = {"env_file": ENV_FILE, "extra": "ignore"}
 

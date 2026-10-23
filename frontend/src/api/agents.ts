@@ -49,7 +49,6 @@ export interface AgentOptions {
   llm_profiles: AgentOption[]
   structured_outputs: AgentOption[]
   skills: AgentOption[]
-  knowledge_bases: AgentOption[]
   connectors: AgentOption[]
   tools: AgentOption[]
   agents: AgentOption[]
@@ -90,6 +89,20 @@ export interface WebSearchSetting {
   method: WebSearchMethod
 }
 
+/** Attach a folder but leave out specific files from it. */
+export interface AgentFolderRule {
+  id: string
+  exclude_document_ids: string[]
+}
+
+/** Read shape: the server returns the resolved file set, not the write-time rules. */
+export interface AgentDocumentItem {
+  id: string
+  filename: string | null
+  folder_id: string | null
+  source_folder_id: string | null
+}
+
 export interface AgentInput {
   name: string
   description: string | null
@@ -101,20 +114,24 @@ export interface AgentInput {
   web_search: WebSearchSetting | null
   skill_ids: string[]
   tool_ids: string[]
-  knowledge_base_ids: string[]
+  folders: AgentFolderRule[]
+  /** Loose file ids attached outside any folder rule. */
+  documents: string[]
   connector_ids: string[]
   subagent_ids: string[]
 }
 
 export type AgentStatus = 'ready' | 'needs_attention'
 
-export interface Agent extends AgentInput {
+// The read `documents` is the resolved item list, which is why it cannot reuse the write-time `string[]`.
+export interface Agent extends Omit<AgentInput, 'documents'> {
   id: string
   workspace_id: string
   resolved: ResolvedDependencies
   capabilities: AgentCapabilities | null
   status: AgentStatus
   issues: string[]
+  documents: AgentDocumentItem[]
   created_at: string
   updated_at: string
 }

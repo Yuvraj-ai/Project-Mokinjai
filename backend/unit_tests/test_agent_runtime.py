@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.crypto import encrypt_api_key
 from app.models.agent import Agent
 from app.models.execution import Execution
-from app.models.knowledge import KnowledgeBase
+from app.models.knowledge import DOCUMENT_STATUS_STORED, Document, FileFolder
 from app.models.llm_profile import LlmProfile
 from app.models.skill import Skill
 from app.models.tool import Tool
@@ -126,7 +126,7 @@ class TestModelBuilding:
 
 class TestToolBuilding:
     @pytest.mark.asyncio
-    async def test_builtins_skills_and_knowledge_are_exposed(
+    async def test_builtins_and_skills_are_exposed(
         self, db_session, test_workspace
     ):
         profile = make_profile(test_workspace.id)
@@ -137,11 +137,22 @@ class TestToolBuilding:
             description="Knows the time",
             content="Use /current_time.",
         )
-        kb = KnowledgeBase(
-            workspace_id=test_workspace.id, name="Handbook", type="document", config={}
-        )
-        db_session.add_all([profile, tool, skill, kb])
+        folder = FileFolder(workspace_id=test_workspace.id, name="Handbook")
+        db_session.add_all([profile, tool, skill, folder])
         await db_session.commit()
+        await db_session.refresh(folder)
+        document = Document(
+            workspace_id=test_workspace.id,
+            folder_id=folder.id,
+            filename="handbook.txt",
+            file_url="workspaces/x/files/y",
+            file_size=10,
+            mime_type="text/plain",
+            status=DOCUMENT_STATUS_STORED,
+        )
+        db_session.add(document)
+        await db_session.commit()
+        await db_session.refresh(document)
 
         validated = await validate_agent(
             db_session,
@@ -157,16 +168,23 @@ class TestToolBuilding:
                 web_search=None,
                 skill_ids=[skill.id],
                 tool_ids=[tool.id],
-                knowledge_base_ids=[kb.id],
+                documents=[document.id],
             ),
             agent_id=None,
         )
         session = SandboxSession(tools=InMemoryToolSource({tool.name: tool.code}))
 
-        tools = await build_tools(db_session, test_workspace.id, validated, session, depth=0)
+        tools = await build_tools(
+            db_session,
+            test_workspace.id,
+            validated,
+            session,
+            depth=0,
+            filenames=["handbook.txt"],
+        )
         names = [tool["name"] if isinstance(tool, dict) else tool.name for tool in tools]
 
-        assert set(names) == {"weather", "current_time", "read_skill", "knowledge_search"}
+        assert set(names) == {"weather", "current_time", "read_skill", "execute_python"}
 
     @pytest.mark.asyncio
     async def test_a_provider_native_search_spec_survives_tool_dedupe(
@@ -191,7 +209,8 @@ class TestToolBuilding:
                 web_search={"enabled": True, "method": "native"},
                 skill_ids=[],
                 tool_ids=[],
-                knowledge_base_ids=[],
+                folders=[],
+                documents=[],
             ),
             agent_id=None,
         )

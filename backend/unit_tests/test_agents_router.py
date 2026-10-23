@@ -11,7 +11,6 @@ from sqlalchemy import select
 from app.models.agent import Agent, AgentSkill, AgentSubagent, AgentTool
 from app.models.connector import ConnectorInstance
 from app.models.execution import Execution
-from app.models.knowledge import KnowledgeBase
 from app.models.llm_profile import LlmProfile
 from app.models.resource_usage import bump_usage
 from app.models.search_credential import SearchCredential
@@ -64,7 +63,8 @@ def payload(profile_id: str, **overrides):
         "params": {"temperature": 0.4, "max_tokens": 2048, "streaming": True},
         "skill_ids": [],
         "tool_ids": [],
-        "knowledge_base_ids": [],
+        "folders": [],
+        "documents": [],
         "connector_ids": [],
         "subagent_ids": [],
     }
@@ -378,13 +378,13 @@ async def test_references_must_exist(client, test_workspace, auth_headers, profi
         json=payload(
             profile.id,
             structured_output_id="missing-output",
-            knowledge_base_ids=["missing-kb"],
+            documents=["missing-document"],
         ),
         headers=auth_headers,
     )
     assert response.status_code == 422
     fields = {error["loc"][-1] for error in response.json()["detail"]}
-    assert fields == {"structured_output_id", "knowledge_base_ids"}
+    assert fields == {"structured_output_id", "documents"}
 
 
 @pytest.mark.asyncio

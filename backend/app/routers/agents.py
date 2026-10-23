@@ -13,14 +13,14 @@ from app.middleware.rbac import require_workspace_role
 from app.models.agent import (
     Agent,
     AgentConnector,
-    AgentKnowledgeBase,
+    AgentDocument,
     AgentSkill,
     AgentSubagent,
     AgentTool,
 )
 from app.models.connector import ConnectorInstance
 from app.models.execution import Execution
-from app.models.knowledge import KnowledgeBase
+from app.models.knowledge import FileFolder
 from app.models.llm_profile import LlmProfile
 from app.models.resource_usage import ResourceUsage, bump_usage
 from app.models.search_credential import SearchCredential
@@ -30,6 +30,7 @@ from app.models.tool import Tool
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.schemas.agent import (
+    AgentDocumentItem,
     AgentCapabilitiesResponse,
     AgentChatRequest,
     AgentListItem,
@@ -44,7 +45,9 @@ from app.schemas.agent import (
 )
 from app.services.agent_capabilities import capabilities_for
 from app.services.agent_composition import (
+    attachment_rows,
     AgentInput,
+    FolderRule,
     CompositionError,
     assert_name_is_free,
     join_ids,
@@ -85,7 +88,11 @@ def _input(request: AgentWriteRequest) -> AgentInput:
         web_search=request.web_search,
         skill_ids=request.skill_ids,
         tool_ids=request.tool_ids,
-        knowledge_base_ids=request.knowledge_base_ids,
+        folders=[
+            FolderRule(id=rule.id, exclude_document_ids=list(rule.exclude_document_ids))
+            for rule in request.folders
+        ],
+        documents=list(request.documents),
         connector_ids=request.connector_ids,
         subagent_ids=request.subagent_ids,
     )
@@ -121,12 +128,6 @@ def _add_joins(db: AsyncSession, agent_id: str, ids: dict[str, list[str]]) -> No
     db.add_all([AgentTool(agent_id=agent_id, tool_id=value) for value in ids["tool_ids"]])
     db.add_all(
         [
-            AgentKnowledgeBase(agent_id=agent_id, knowledge_base_id=value)
-            for value in ids["knowledge_base_ids"]
-        ]
-    )
-    db.add_all(
-        [
             AgentConnector(agent_id=agent_id, connector_instance_id=value)
             for value in ids["connector_ids"]
         ]
@@ -136,8 +137,22 @@ def _add_joins(db: AsyncSession, agent_id: str, ids: dict[str, list[str]]) -> No
     )
 
 
+def _add_attachments(db: AsyncSession, agent_id: str, validated) -> None:
+    """One row per resolved file; a folder is only its source, never a live rule."""
+    db.add_all(
+        [
+            AgentDocument(
+                agent_id=agent_id,
+                document_id=row.id,
+                source_folder_id=validated.attachment_sources.get(row.id),
+            )
+            for row in validated.attached_documents
+        ]
+    )
+
+
 async def _replace_joins(db: AsyncSession, agent_id: str, ids: dict[str, list[str]]) -> None:
-    for model in (AgentSkill, AgentTool, AgentKnowledgeBase, AgentConnector, AgentSubagent):
+    for model in (AgentSkill, AgentTool, AgentConnector, AgentSubagent, AgentDocument):
         await db.execute(delete(model).where(model.agent_id == agent_id))
     _add_joins(db, agent_id, ids)
 
@@ -146,7 +161,6 @@ def _ids_from_validated(validated) -> dict[str, list[str]]:
     return {
         "skill_ids": [row.id for row in validated.selected_skills],
         "tool_ids": [row.id for row in validated.direct_tools],
-        "knowledge_base_ids": [row.id for row in validated.knowledge_bases],
         "connector_ids": [row.id for row in validated.connectors],
         "subagent_ids": [row.id for row in validated.subagents],
     }
@@ -335,7 +349,15 @@ async def _to_response(
         web_search=agent.web_search,
         skill_ids=ids["skill_ids"],
         tool_ids=ids["tool_ids"],
-        knowledge_base_ids=ids["knowledge_base_ids"],
+        documents=[
+            AgentDocumentItem(
+                id=document.id,
+                filename=document.filename,
+                folder_id=document.folder_id,
+                source_folder_id=source_folder_id,
+            )
+            for document, source_folder_id in await attachment_rows(db, agent.id)
+        ],
         connector_ids=ids["connector_ids"],
         subagent_ids=ids["subagent_ids"],
         resolved=resolved,
@@ -404,17 +426,6 @@ async def agent_options(
         .scalars()
         .all()
     )
-    knowledge_bases = list(
-        (
-            await db.execute(
-                _ordered(KnowledgeBase, "knowledge_base").where(
-                    KnowledgeBase.workspace_id == workspace_id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
     connectors = list(
         (
             await db.execute(
@@ -473,7 +484,6 @@ async def agent_options(
             AgentOption(id=row.id, name=row.name, description=row.description) for row in outputs
         ],
         skills=skill_options,
-        knowledge_bases=[AgentOption(id=row.id, name=row.name) for row in knowledge_bases],
         connectors=[
             AgentOption(id=row.id, name=row.name, status=row.status) for row in connectors
         ],
@@ -551,6 +561,7 @@ async def create_agent(
     db.add(agent)
     await db.flush()
     _add_joins(db, agent.id, _ids_from_validated(validated))
+    _add_attachments(db, agent.id, validated)
     try:
         await db.commit()
     except IntegrityError:
@@ -600,6 +611,7 @@ async def update_agent(
     )
     agent.web_search = validated.web_search
     await _replace_joins(db, agent.id, _ids_from_validated(validated))
+    _add_attachments(db, agent.id, validated)
     try:
         await db.commit()
     except IntegrityError:

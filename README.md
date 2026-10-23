@@ -1,18 +1,26 @@
-# Project Mokinjay — AI Agent Builder
+# Project Mokinjay — AI Agent Platform as a Service
 
-A visual AI agent builder platform where users create, configure, and run AI workflows by connecting modular components through a drag-and-drop interface. Think **"Zapier meets LangChain"** with a visual canvas.
+Mokinjay is an **AI agent platform as a service**. Users build highly customized AI agents by combining resources from a built-in library — system prompts, structured outputs, LLM profiles, tools, connectors, skills, and files — then expose each agent as an API endpoint with its own API key. External applications — chatbots, CRMs, dashboards, any app without an AI stack — call that endpoint to get AI features (chat, structured output, tool execution, file analysis) without building an AI solution themselves.
+
+**The agent is the product.** The resource library feeds agent construction; API exposure is the delivery mechanism. The visual workflow editor (canvas) is a legacy feature kept from before this goal was clarified.
+
+**Flow: Build agent → expose endpoint → external app calls it with API key.**
 
 ## What It Does
 
-- **Visual Workflow Editor** — Drag-and-drop canvas powered by React Flow to design AI agent pipelines
-- **8 Module Types** — Input, Agent (LLM), Prompt Template, Output, Conditional, Transform, HTTP Request, Knowledge Base
-- **Multi-Provider LLM Support** — OpenAI, Anthropic, and Gemini models
-- **Prompt Management System** — Create, edit, and reuse system prompts with auto-detected `{variables}`, token estimation, and linked references to Agent nodes
-- **DAG Execution Engine** — Topological sorting, conditional branching, parallel-safe execution
-- **Real-Time Updates** — WebSocket-based live execution progress on the canvas
-- **Workspace & RBAC** — Multi-user workspaces with owner/admin/editor/viewer roles
-- **Execution History** — Full trace logging with per-node inputs, outputs, timings, and token usage
-- **Dark Mode** — Full dark theme with toggle, persisted to localStorage
+- **Resource Library** — Prompts, structured outputs, LLM profiles, tools, connectors, skills, and files, managed per workspace
+- **Multi-Provider LLM Support** — OpenAI, Anthropic, and Gemini profiles, verified before use with encrypted API keys
+- **Structured Outputs** — Reusable JSON-Schema definitions with `@Reference` nesting, compiled on demand
+- **Tools & Skills** — Built-in and user-defined Python tools run in an isolated Docker sandbox; markdown skill packs with progressive disclosure
+- **Connectors** — Predefined catalog (Slack, GitHub, Notion, PostgreSQL, …) loaded as MCP tools at runtime
+- **Files** — Workspace file library (flat folders, loose files) attached to agents; PDF/DOCX/XLSX/CSV are read by sandboxed Python, not a fixed extraction pipeline
+- **Data Sources** — External database connections (PostgreSQL, MySQL, MongoDB, ChromaDB)
+- **Visual Workflow Editor (legacy)** — Drag-and-drop canvas for AI pipelines, still working from the earlier phase
+- **Workspaces & RBAC** — Multi-user workspaces with owner/admin/editor/viewer roles
+
+## Goal
+
+Deliver the full flow: **build an agent from the resource library → expose it as an API endpoint with an API key → let external apps call it.** The resource library and sandbox runtime are complete; agent creation, a chat tab for testing, and API exposure are the current frontier.
 
 ## Tech Stack
 
@@ -37,7 +45,7 @@ mokinjay project/
 │   │   ├── database.py          # SQLAlchemy async engine
 │   │   ├── models/              # Database models (User, Workspace, Workflow, Execution, PromptTemplate, etc.)
 │   │   ├── schemas/             # Pydantic request/response schemas
-│   │   ├── routers/             # API routes (auth, workspaces, workflows, executions, knowledge, prompts)
+│   │   ├── routers/             # API routes (auth, workspaces, workflows, executions, files, prompts)
 │   │   ├── engine/              # Workflow execution engine
 │   │   │   ├── dag_builder.py   # Flow-to-DAG conversion, cycle detection, topological sort
 │   │   │   ├── executor.py      # Main execution loop with conditional branching
@@ -277,14 +285,16 @@ This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker,
 | `GET/PUT/DELETE` | `/api/workspaces/:id/connectors/:id` | Get/update/delete connector instance |
 | `POST` | `/api/workspaces/:id/connectors/:id/test` | Test MCP tool discovery probe |
 
-### Knowledge Base & Storage
+### Files & Storage
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET/POST` | `/api/workspaces/:id/knowledge-bases` | List/create knowledge bases |
-| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id` | Get/delete knowledge base |
-| `GET/POST` | `/api/workspaces/:id/knowledge-bases/:id/documents` | List/upload document (multipart) |
-| `GET/DELETE` | `/api/workspaces/:id/knowledge-bases/:id/documents/:id` | Get metadata / delete document & storage |
-| `GET` | `/api/workspaces/:id/knowledge-bases/:id/documents/:id/download` | Safe document download |
+| `GET/POST` | `/api/workspaces/:id/files/folders` | List/create folders |
+| `PATCH/DELETE` | `/api/workspaces/:id/files/folders/:id` | Rename/delete a folder (force delete needs `force` + the exact name) |
+| `GET` | `/api/workspaces/:id/files/documents` | List files (`folder_id`, `unfiled`, `q`) |
+| `POST` | `/api/workspaces/:id/files/documents` | Upload a file (multipart, optional `folder_id`, 95 MiB) |
+| `PATCH` | `/api/workspaces/:id/files/documents` | Move files to a folder or the root |
+| `DELETE` | `/api/workspaces/:id/files/documents/:id` | Delete a file and its bytes (refused while attached) |
+| `GET` | `/api/workspaces/:id/files/documents/:id/download` | Safe file download |
 | `GET/POST` | `/api/workspaces/:id/external-databases` | List/create external DB connection |
 | `DELETE` | `/api/workspaces/:id/external-databases/:id` | Delete external DB connection |
 

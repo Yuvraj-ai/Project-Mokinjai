@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from app.database import get_db
 from app.logging import logger
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
+from app.models.agent import AgentDocument
+from app.models.knowledge import Document
 from app.schemas.workspace import (
     WorkspaceCreate,
     WorkspaceUpdate,
@@ -106,6 +108,12 @@ async def delete_workspace(
     if workspace is None:
         logger.warning(f"Workspace {workspace_id} not found")
         raise NotFoundException("Workspace")
+
+    # The folder FK is RESTRICT, so the rows must go before the workspace cascade can
+    # remove the folders. Bytes are still not deleted here; that gap predates this change.
+    document_ids = select(Document.id).where(Document.workspace_id == workspace_id)
+    await db.execute(delete(AgentDocument).where(AgentDocument.document_id.in_(document_ids)))
+    await db.execute(delete(Document).where(Document.workspace_id == workspace_id))
 
     await db.delete(workspace)
     await db.commit()

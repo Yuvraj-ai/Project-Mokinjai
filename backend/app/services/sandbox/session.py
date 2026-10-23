@@ -114,6 +114,15 @@ class SandboxSession:
         return self._started and not self._closed
 
     @property
+    def uses_docker(self) -> bool:
+        """Whether the session is configured for a container.
+
+        `auto` may still fall back at start when the socket is unreachable; the tool is
+        then offered and its imports fail honestly, rather than the file being invisible.
+        """
+        return self._config.backend in ("auto", "docker")
+
+    @property
     def output_dir(self) -> Path | None:
         """The host directory this run's generated files are collected into.
 

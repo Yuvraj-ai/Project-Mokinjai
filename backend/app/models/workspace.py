@@ -17,7 +17,7 @@ class Workspace(Base):
     owner = relationship("User", back_populates="owned_workspaces")
     members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
     workflows = relationship("Workflow", back_populates="workspace", cascade="all, delete-orphan")
-    knowledge_bases = relationship("KnowledgeBase", back_populates="workspace", cascade="all, delete-orphan")
+    file_folders = relationship("FileFolder", back_populates="workspace", cascade="all, delete-orphan")
     api_keys = relationship("ApiKey", back_populates="workspace", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="workspace", cascade="all, delete-orphan")
     prompt_templates = relationship("PromptTemplate", back_populates="workspace", cascade="all, delete-orphan")

@@ -60,6 +60,50 @@ def user_tool(schema: ToolSchema, session: SandboxSession) -> BaseTool:
     )
 
 
+# Enough output for a table or a traceback, small enough that a runaway print cannot
+# consume the context window. The marker is part of the contract: a silently cut result
+# would look complete.
+STDOUT_LIMIT = 20_000
+TRUNCATION_MARKER = "\n… [truncated]"
+
+
+def _truncate(text: str) -> str:
+    return text if len(text) <= STDOUT_LIMIT else text[:STDOUT_LIMIT] + TRUNCATION_MARKER
+
+
+def sandbox_python_tool(session: SandboxSession, filenames: list[str]) -> BaseTool:
+    """Run Python in the run's sandbox, with the run's files mounted for reading."""
+
+    mounted = ", ".join(filenames) if filenames else "none"
+
+    async def execute_python(code: str) -> str:
+        result = await asyncio.to_thread(session.execute_python, code)
+        return json.dumps(
+            {
+                "stdout": _truncate(result.stdout),
+                "stderr": _truncate(result.stderr),
+                "ok": result.error is None,
+                "error": result.error.message if result.error is not None else None,
+                "files": [row.name for row in result.generated_files],
+            }
+        )
+
+    return StructuredTool(
+        name="execute_python",
+        description=(
+            "Run Python to inspect or transform the files attached to this agent. "
+            f"Mounted read-only in /app/data: {mounted}. "
+            "/app/work is writable scratch; files written to /app/output are captured "
+            "and returned by name. pandas, openpyxl, python-docx and pypdf are "
+            "installed. There is no network. Print summaries and aggregates, not whole "
+            "dataframes or whole files. An exception returns its traceback verbatim. "
+            "The default timeout is 30 seconds."
+        ),
+        args_schema=create_model("SandboxPythonInput", code=(str, Field(description="Python source to run."))),
+        coroutine=execute_python,
+    )
+
+
 def read_skill_tool(resolved: ResolvedSkills) -> BaseTool:
     contents = {name.lower(): body for name, body in resolved.contents.items()}
 
@@ -74,24 +118,6 @@ def read_skill_tool(resolved: ResolvedSkills) -> BaseTool:
             "Return the full instructions for one of the agent's skills. "
             "The skill menu lists the names."
         ),
-    )
-
-
-def knowledge_search_tool(knowledge_base_names: list[str]) -> BaseTool:
-    selected = ", ".join(knowledge_base_names) if knowledge_base_names else "none selected"
-
-    def knowledge_search(query: str) -> str:
-        """Search the agent's knowledge bases for passages relevant to a query."""
-        return (
-            f"Knowledge base retrieval is not available yet, so '{query}' could not be "
-            f"searched. Selected knowledge bases: {selected}. Answer from what you already "
-            "know and say that you could not check the knowledge base."
-        )
-
-    return StructuredTool.from_function(
-        func=knowledge_search,
-        name="knowledge_search",
-        description="Search the agent's knowledge bases for relevant passages.",
     )
 
 

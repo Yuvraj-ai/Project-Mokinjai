@@ -49,15 +49,15 @@ class SandboxContext:
 
     Offline by construction, and that is the resolution of a contradiction in the
     recorded design. The tool design said a tool body runs with a `ctx` giving it
-    database, HTTP and knowledge-base access; ADR-010 runs this container with
+    database, HTTP and stored-document access; ADR-010 runs this container with
     `--network none`, and there is no database and no object-storage credential inside
-    it. So `ctx` exposes exactly what the container can reach: the read-only
-    knowledge-base files under `data_dir`, and the writable output and work directories.
+    it. So `ctx` exposes exactly what the container can reach: the read-only run files
+    under `data_dir`, and the writable output and work directories.
 
     A tool that needs a database, an HTTP call or object storage calls a host-side tool
     for it, where the credentials already live (ADR-020). The capability moves from
     sandboxed code to trusted host code rather than being faked here, and there is
-    deliberately no `ctx.database`, `ctx.http` or `ctx.knowledge_base`: a surface that
+    deliberately no `ctx.database`, `ctx.http` or retrieval surface: a surface that
     does not exist cannot be reached by mistake.
     """
 
@@ -66,7 +66,7 @@ class SandboxContext:
         self.output_dir = output_dir
         self.work_dir = work_dir
 
-    # -- the mounted knowledge base, read-only ------------------------------ #
+    # -- the mounted run files, read-only ------------------------------------ #
 
     def list_inputs(self):
         """Names of the files mounted under the data directory, relative and sorted."""

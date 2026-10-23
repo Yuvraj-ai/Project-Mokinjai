@@ -10,7 +10,6 @@ import pytest
 
 from app.schemas.tool import ToolParameter, ToolSchema
 from app.services.agent_tools import (
-    knowledge_search_tool,
     read_skill_tool,
     subagent_tool,
     user_tool,
@@ -90,16 +89,6 @@ async def test_read_skill_is_case_insensitive_and_names_an_unknown_skill():
     assert await tool.ainvoke({"name": "skilla"}) == "Alpha body"
     unknown = await tool.ainvoke({"name": "Missing"})
     assert "No skill named" in unknown
-
-
-@pytest.mark.asyncio
-async def test_knowledge_search_is_explicit_about_unavailable_retrieval():
-    tool = knowledge_search_tool(["Handbook", "Policies"])
-
-    result = await tool.ainvoke({"query": "holiday allowance"})
-
-    assert "not available" in result.lower()
-    assert "Handbook" in result
 
 
 @pytest.mark.asyncio

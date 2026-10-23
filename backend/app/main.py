@@ -9,7 +9,7 @@ from app.routers import (
     workspaces,
     workflows,
     executions,
-    knowledge,
+    files,
     prompts,
     llm_profiles,
     structured_outputs,
@@ -96,7 +96,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(workspaces.router, prefix="/api/workspaces", tags=["workspaces"])
 app.include_router(workflows.router, prefix="/api/workspaces/{workspace_id}/workflows", tags=["workflows"])
 app.include_router(executions.router, prefix="/api/workspaces/{workspace_id}", tags=["executions"])
-app.include_router(knowledge.router, prefix="/api/workspaces/{workspace_id}/knowledge-bases", tags=["knowledge"])
+app.include_router(files.router, prefix="/api/workspaces/{workspace_id}/files", tags=["files"])
 app.include_router(prompts.router, prefix="/api/workspaces/{workspace_id}/prompts", tags=["prompts"])
 app.include_router(llm_profiles.router, prefix="/api/workspaces/{workspace_id}/llm-profiles", tags=["llm-profiles"])
 app.include_router(

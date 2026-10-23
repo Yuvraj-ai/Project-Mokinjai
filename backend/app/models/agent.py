@@ -63,8 +63,8 @@ class Agent(Base):
     structured_output = relationship("StructuredOutput")
     source_prompt = relationship("PromptTemplate")
     skills = relationship("AgentSkill", back_populates="agent", cascade="all, delete-orphan")
-    knowledge_bases = relationship(
-        "AgentKnowledgeBase", back_populates="agent", cascade="all, delete-orphan"
+    documents = relationship(
+        "AgentDocument", back_populates="agent", cascade="all, delete-orphan"
     )
     connectors = relationship("AgentConnector", back_populates="agent", cascade="all, delete-orphan")
     tools = relationship("AgentTool", back_populates="agent", cascade="all, delete-orphan")
@@ -106,18 +106,31 @@ class AgentTool(Base):
     agent = relationship("Agent", back_populates="tools")
 
 
-class AgentKnowledgeBase(Base):
-    __tablename__ = "agent_knowledge_bases"
-    __table_args__ = (Index("ix_agent_knowledge_bases_knowledge_base_id", "knowledge_base_id"),)
+class AgentDocument(Base):
+    """One file attached to one agent.
+
+    A folder attachment is flattened to these rows at save time (spec, Option A), so the
+    snapshot is the storage itself. `source_folder_id` exists only so the picker can group
+    the files by the rule that attached them; it is not a live reference.
+    """
+
+    __tablename__ = "agent_documents"
+    __table_args__ = (Index("ix_agent_documents_document_id", "document_id"),)
 
     agent_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
     )
-    knowledge_base_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), primary_key=True
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="RESTRICT"), primary_key=True
+    )
+    source_folder_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("file_folders.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    agent = relationship("Agent", back_populates="knowledge_bases")
+    agent = relationship("Agent", back_populates="documents")
 
 
 class AgentConnector(Base):

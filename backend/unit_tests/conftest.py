@@ -55,6 +55,11 @@ async def engine():
     """One schema for the whole session; rows are cleared per test instead."""
     engine = create_async_engine(TEST_DATABASE_URL, pool_pre_ping=True)
     async with engine.begin() as conn:
+        # Tables dropped from the models are invisible to drop_all and can hold FKs that
+        # block it. The suite owns this database, so clear the two retired names first.
+        await conn.execute(
+            text("DROP TABLE IF EXISTS agent_knowledge_bases, knowledge_bases CASCADE")
+        )
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield engine

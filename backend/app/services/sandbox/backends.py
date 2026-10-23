@@ -14,7 +14,7 @@ the other a `Popen`.
 import os
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, ClassVar, Protocol, runtime_checkable
 
@@ -26,6 +26,20 @@ from app.services.sandbox.protocol import JobRequest, KernelResponse, send_reque
 # The kernel is one file, and the subprocess backend runs exactly the file that the
 # image bakes in, so there is a single source of truth for what executes code.
 KERNEL_PATH = Path(__file__).with_name("kernel.py")
+
+# Upload ceiling, which is also the largest file a tier can be sized for. The upload
+# route refuses above it; this is the second gate.
+MAX_FILE_BYTES = 95 * 2**20
+
+# (largest attached file, memory, cpus, tmpfs MB for /app/work and /app/output). A file
+# at or above a threshold gets that tier, so 95 MiB — the upload ceiling — gets 2 GB.
+# 256 MB is the tool-only size: the standard library and a small CSV, not pandas.
+TIERS = (
+    (0, "256m", "0.5", 64),
+    (10 * 2**20, "512m", "0.5", 128),
+    (50 * 2**20, "1g", "1.0", 256),
+    (MAX_FILE_BYTES, "2g", "1.0", 512),
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +64,9 @@ class ContainerSpec:
     output_tmpfs_mb: int
     work_tmpfs_mb: int
     max_run_seconds: int
+    # Pinned to `memory` by `container_spec`: swap would let the container exceed the
+    # limit this tier is meant to guarantee.
+    memory_swap: str = ""
     socket_name: str = "kernel.sock"
     labels: dict[str, str] = field(default_factory=dict)
 
@@ -118,6 +135,7 @@ class SandboxConfig:
             image=self.image,
             memory=self.memory,
             cpus=self.cpus,
+            memory_swap=self.memory,
             user=self.user,
             network=self.network,
             read_only=self.read_only,
@@ -126,6 +144,38 @@ class SandboxConfig:
             work_tmpfs_mb=self.work_tmpfs_mb,
             max_run_seconds=self.max_run_seconds,
             labels={"mokinjay.run": run_id},
+        )
+
+    @property
+    def memory_mb(self) -> int:
+        """The memory limit in megabytes, for the workspace budget."""
+        value = self.memory.strip().lower()
+        if value.endswith("g"):
+            return int(value[:-1]) * 1024
+        if value.endswith("m"):
+            return int(value[:-1])
+        raise ValueError(f"Unsupported memory limit {self.memory!r}")
+
+    def tiered(self, max_file_bytes: int) -> "SandboxConfig":
+        """The config for a run whose largest attached file is `max_file_bytes`.
+
+        Refuses above the upload ceiling rather than silently choosing the last tier:
+        the route already prevents it, so reaching this means something bypassed it.
+        """
+        if max_file_bytes > MAX_FILE_BYTES:
+            raise ValueError(
+                f"A {max_file_bytes} byte file exceeds the {MAX_FILE_BYTES} byte sandbox ceiling"
+            )
+        memory, cpus, tmpfs = TIERS[0][1:]
+        for threshold, tier_memory, tier_cpus, tier_tmpfs in TIERS:
+            if max_file_bytes >= threshold:
+                memory, cpus, tmpfs = tier_memory, tier_cpus, tier_tmpfs
+        return replace(
+            self,
+            memory=memory,
+            cpus=cpus,
+            output_tmpfs_mb=tmpfs,
+            work_tmpfs_mb=tmpfs,
         )
 
 

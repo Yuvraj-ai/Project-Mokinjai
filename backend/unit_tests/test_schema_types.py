@@ -21,7 +21,6 @@ JSONB_COLUMNS = [
     ("executions", "token_usage"),
     ("workflows", "flow_definition"),
     ("workflow_versions", "flow_definition"),
-    ("knowledge_bases", "config"),
     ("documents", "metadata"),
     ("structured_outputs", "fields"),
     ("connector_instances", "config"),

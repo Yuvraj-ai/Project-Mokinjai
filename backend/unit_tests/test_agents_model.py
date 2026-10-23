@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.agent import Agent, AgentConnector, AgentSkill, AgentSubagent
 from app.models.connector import ConnectorInstance
 from app.models.execution import Execution
-from app.models.knowledge import KnowledgeBase
+from app.models.knowledge import FileFolder
 from app.models.llm_profile import LlmProfile
 from app.models.resource_usage import ResourceUsage, bump_usage
 from app.models.search_credential import SearchCredential
@@ -104,7 +104,7 @@ class TestAgentModel:
             content="Body",
         )
         tool = Tool(workspace_id=test_workspace.id, name="tool_a", code="def tool_a():\n    return 1")
-        kb = KnowledgeBase(workspace_id=test_workspace.id, name="KB", type="document", config={})
+        kb = FileFolder(workspace_id=test_workspace.id, name="KB")
         connector = ConnectorInstance(
             workspace_id=test_workspace.id,
             connector_type="github",

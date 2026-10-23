@@ -201,6 +201,7 @@ class DockerBackend:
             "--label", SWEEP_LABEL,
             *[f"--label={key}={value}" for key, value in self._spec.labels.items()],
             "--memory", self._spec.memory,
+            "--memory-swap", self._spec.memory_swap or self._spec.memory,
             "--cpus", self._spec.cpus,
             "--network", self._spec.network,
             "--user", self._spec.user,

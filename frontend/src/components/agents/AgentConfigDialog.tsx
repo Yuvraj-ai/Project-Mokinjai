@@ -16,6 +16,7 @@ import {
   type WebSearchMethod,
 } from '../../api/agents'
 import { listPrompts, type PromptTemplate } from '../../api/prompts'
+import { listDocuments, listFolders } from '../../api/files'
 import {
   SEARCH_KEY_PROVIDERS,
   listSearchCredentials,
@@ -26,6 +27,7 @@ import LlmPicker from './LlmPicker'
 import MultiSelect from './MultiSelect'
 import NumberSlider from './NumberSlider'
 import SkillPicker from './SkillPicker'
+import FilePicker, { type FileSelection } from './FilePicker'
 
 const SOURCE_LABEL: Record<string, string> = {
   profile_override: 'set on the LLM profile',
@@ -45,7 +47,8 @@ function blankInput(): AgentInput {
     web_search: null,
     skill_ids: [],
     tool_ids: [],
-    knowledge_base_ids: [],
+    folders: [],
+    documents: [],
     connector_ids: [],
     subagent_ids: [],
   }
@@ -63,7 +66,9 @@ function toInput(agent: Agent): AgentInput {
     web_search: agent.web_search,
     skill_ids: [...agent.skill_ids],
     tool_ids: [...agent.tool_ids],
-    knowledge_base_ids: [...agent.knowledge_base_ids],
+    // Placeholder only: the resolved file set is hydrated asynchronously after mount.
+    folders: [],
+    documents: [],
     connector_ids: [...agent.connector_ids],
     subagent_ids: [...agent.subagent_ids],
   }
@@ -121,6 +126,9 @@ export default function AgentConfigDialog({
   const [savingKey, setSavingKey] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [stopText, setStopText] = useState((agent?.params.stop ?? []).join(', '))
+  const [filesLoading, setFilesLoading] = useState(agent !== null)
+  const [fileCount, setFileCount] = useState(agent?.documents.length ?? 0)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
     listPrompts(workspaceId)
@@ -130,6 +138,62 @@ export default function AgentConfigDialog({
       .then(setCredentials)
       .catch(() => {})
   }, [workspaceId])
+
+  // `toInput` cannot invert the write-time rules from the resolved file set alone,
+  // so the folder rules are rebuilt against the live file list once it is loaded.
+  useEffect(() => {
+    if (!agent) {
+      setFilesLoading(false)
+      return
+    }
+    let cancelled = false
+    setFilesLoading(true)
+    void Promise.all([listFolders(workspaceId), listDocuments(workspaceId)])
+      .then(([folders, docList]) => {
+        if (cancelled) return
+        const attached = new Set(agent.documents.map((doc) => doc.id))
+        const filesByFolder = new Map<string, string[]>()
+        for (const doc of docList.documents) {
+          if (!doc.folder_id) continue
+          const ids = filesByFolder.get(doc.folder_id) ?? []
+          ids.push(doc.id)
+          filesByFolder.set(doc.folder_id, ids)
+        }
+        const selection: FileSelection = { folders: [], documents: [] }
+        for (const [folderId, fileIds] of filesByFolder) {
+          if (!fileIds.some((id) => attached.has(id))) continue
+          selection.folders.push({
+            id: folderId,
+            exclude_document_ids: fileIds.filter((id) => !attached.has(id)),
+          })
+        }
+        // A file whose source folder lost its live files (e.g. the folder was
+        // emptied or renamed away) cannot be expressed as a rule, so it stays a
+        // loose id and is never silently dropped.
+        const ruleFolders = new Set(selection.folders.map((rule) => rule.id))
+        selection.documents = agent.documents
+          .filter(
+            (doc) => doc.source_folder_id === null || !ruleFolders.has(doc.source_folder_id)
+          )
+          .map((doc) => doc.id)
+        setForm((previous) => ({ ...previous, ...selection }))
+        setFileCount(attached.size)
+        setFilesLoading(false)
+      })
+      .catch((caught) => {
+        if (cancelled) return
+        setForm((previous) => ({
+          ...previous,
+          folders: [],
+          documents: agent.documents.map((doc) => doc.id),
+        }))
+        setFilesLoading(false)
+        setMessage(fieldErrors(caught).message ?? 'Could not load the workspace files.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [agent, workspaceId])
 
   const selectedOption = options.llm_profiles.find((item) => item.id === form.llm_profile_id)
   const capabilities =
@@ -598,14 +662,41 @@ export default function AgentConfigDialog({
               toolError={fieldError('tool_ids')}
             />
 
-            <MultiSelect
-              label="Knowledge bases"
-              options={options.knowledge_bases}
-              values={form.knowledge_base_ids}
-              onChange={(ids) => setField('knowledge_base_ids', ids)}
-              emptyText="No knowledge bases yet."
-              error={fieldError('knowledge_base_ids')}
-            />
+            <div className="rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
+                  Files
+                </span>
+                <span className="text-[11px] text-ink-500 dark:text-ink-300">
+                  {filesLoading
+                    ? 'Checking files…'
+                    : fileCount > 0
+                      ? `${fileCount} file(s) attached`
+                      : 'No files attached'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  disabled={filesLoading}
+                  onClick={() => setPickerOpen(true)}
+                  className="rounded-lg border border-ink-100 dark:border-ink-600 px-3 py-1.5 text-xs text-ink-600 dark:text-ink-200 hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
+                >
+                  Edit files
+                </button>
+                {fieldError('documents') && (
+                  <span className="text-[11px] text-status-error">{fieldError('documents')}</span>
+                )}
+              </div>
+              <FilePicker
+                workspaceId={workspaceId}
+                value={{ folders: form.folders, documents: form.documents }}
+                onChange={(value) => setForm((previous) => ({ ...previous, ...value }))}
+                onSummary={setFileCount}
+                open={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+              />
+            </div>
 
             <MultiSelect
               label="Connectors"
@@ -658,7 +749,7 @@ export default function AgentConfigDialog({
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || filesLoading}
             onClick={() => void save()}
             className="rounded-lg bg-accent-warm px-4 py-1.5 text-xs text-white disabled:opacity-50"
           >

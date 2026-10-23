@@ -28,9 +28,7 @@ from app.services.storage.s3 import S3Storage
 
 
 def test_the_key_is_workspace_and_document_scoped():
-    assert build_storage_key("ws-1", "kb-1", "doc-1") == (
-        "workspaces/ws-1/knowledge-bases/kb-1/documents/doc-1"
-    )
+    assert build_storage_key("ws-1", "doc-1") == "workspaces/ws-1/files/doc-1"
 
 
 def test_the_key_takes_no_client_supplied_text():
@@ -41,7 +39,6 @@ def test_the_key_takes_no_client_supplied_text():
     """
     assert list(inspect.signature(build_storage_key).parameters) == [
         "workspace_id",
-        "knowledge_base_id",
         "document_id",
     ]
 

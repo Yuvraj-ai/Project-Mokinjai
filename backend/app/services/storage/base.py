@@ -46,7 +46,7 @@ class StorageBackend(Protocol):
         ...
 
 
-def build_storage_key(workspace_id: str, knowledge_base_id: str, document_id: str) -> str:
+def build_storage_key(workspace_id: str, document_id: str) -> str:
     """The object key for one document.
 
     Workspace-leading so deleting a workspace's objects is one prefix delete later;
@@ -54,4 +54,4 @@ def build_storage_key(workspace_id: str, knowledge_base_id: str, document_id: st
     no filename and no other client-supplied text, which is the whole path-traversal
     defence: a hostile name has nowhere to enter the key.
     """
-    return f"workspaces/{workspace_id}/knowledge-bases/{knowledge_base_id}/documents/{document_id}"
+    return f"workspaces/{workspace_id}/files/{document_id}"

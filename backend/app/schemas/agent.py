@@ -8,6 +8,13 @@ AGENT_DESCRIPTION_MAX = 2000
 AGENT_PROMPT_MAX = 32_000
 
 
+class AgentFolderRule(BaseModel):
+    """A folder the user ticked, plus the files inside it they unticked."""
+
+    id: str
+    exclude_document_ids: list[str] = Field(default_factory=list)
+
+
 class AgentWriteRequest(BaseModel):
     name: str = Field(min_length=1, max_length=AGENT_NAME_MAX)
     description: str | None = Field(default=None, max_length=AGENT_DESCRIPTION_MAX)
@@ -19,7 +26,8 @@ class AgentWriteRequest(BaseModel):
     web_search: dict[str, Any] | None = None
     skill_ids: list[str] = Field(default_factory=list)
     tool_ids: list[str] = Field(default_factory=list)
-    knowledge_base_ids: list[str] = Field(default_factory=list)
+    folders: list[AgentFolderRule] = Field(default_factory=list)
+    documents: list[str] = Field(default_factory=list)
     connector_ids: list[str] = Field(default_factory=list)
     subagent_ids: list[str] = Field(default_factory=list)
 
@@ -73,6 +81,13 @@ class ResolvedDependencies(BaseModel):
     tools: list[ResolvedTool] = Field(default_factory=list)
 
 
+class AgentDocumentItem(BaseModel):
+    id: str
+    filename: str | None
+    folder_id: str | None
+    source_folder_id: str | None
+
+
 class AgentResponse(BaseModel):
     id: str
     workspace_id: str
@@ -86,7 +101,7 @@ class AgentResponse(BaseModel):
     web_search: dict[str, Any] | None
     skill_ids: list[str] = Field(default_factory=list)
     tool_ids: list[str] = Field(default_factory=list)
-    knowledge_base_ids: list[str] = Field(default_factory=list)
+    documents: list[AgentDocumentItem] = Field(default_factory=list)
     connector_ids: list[str] = Field(default_factory=list)
     subagent_ids: list[str] = Field(default_factory=list)
     resolved: ResolvedDependencies = Field(default_factory=ResolvedDependencies)
@@ -137,7 +152,6 @@ class AgentOptionsResponse(BaseModel):
     llm_profiles: list[AgentOption] = Field(default_factory=list)
     structured_outputs: list[AgentOption] = Field(default_factory=list)
     skills: list[AgentOption] = Field(default_factory=list)
-    knowledge_bases: list[AgentOption] = Field(default_factory=list)
     connectors: list[AgentOption] = Field(default_factory=list)
     tools: list[AgentOption] = Field(default_factory=list)
     agents: list[AgentOption] = Field(default_factory=list)

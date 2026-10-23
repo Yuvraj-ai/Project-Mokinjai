@@ -6,7 +6,8 @@ import ExecutionHistoryPage from './pages/ExecutionHistoryPage'
 import PromptsPage from './pages/PromptsPage'
 import LlmProfilesPage from './pages/LlmProfilesPage'
 import StructuredOutputsPage from './pages/StructuredOutputsPage'
-import KnowledgeBasePage from './pages/KnowledgeBasePage'
+import FilesPage from './pages/FilesPage'
+import DataSourcesPage from './pages/DataSourcesPage'
 import SkillsPage from './pages/SkillsPage'
 import ToolsPage from './pages/ToolsPage'
 import ConnectorsPage from './pages/ConnectorsPage'
@@ -26,7 +27,8 @@ export default function App() {
         <Route path="/executions" element={<ExecutionHistoryPage />} />
         <Route path="/prompts" element={<PromptsPage />} />
         <Route path="/structured-outputs" element={<StructuredOutputsPage />} />
-        <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="/files" element={<FilesPage />} />
+        <Route path="/data-sources" element={<DataSourcesPage />} />
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/llms" element={<LlmProfilesPage />} />
         <Route path="/tools" element={<ToolsPage />} />

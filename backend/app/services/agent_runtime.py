@@ -13,9 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import shutil
+import tempfile
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from langchain.agents import create_agent
@@ -30,6 +34,7 @@ from app.database import async_session
 from app.logging import logger
 from app.models.agent import Agent
 from app.models.execution import Execution
+from app.models.knowledge import Document
 from app.models.llm_profile import LlmProfile
 from app.models.resource_usage import bump_usage
 from app.models.search_credential import SearchCredential
@@ -41,13 +46,15 @@ from app.services.agent_composition import (
 )
 from app.services.agent_dependencies import DEFAULT_MAX_SUBAGENT_DEPTH
 from app.services.agent_tools import (
-    knowledge_search_tool,
     read_skill_tool,
+    sandbox_python_tool,
     subagent_tool,
     user_tool,
 )
 from app.services.connector_runtime import load_connector_tools
 from app.services.sandbox import InMemoryToolSource, SandboxConfig, SandboxSession
+from app.services.sandbox.budget import release, reserve
+from app.services.storage import StorageError, get_storage
 from app.services.tool_schema import extract_schema, extraction_error
 from app.services.web_search import build_web_search_tool, native_web_search_spec
 from app.tools.registry import list_builtin_tools
@@ -115,6 +122,7 @@ async def build_tools(
     session: SandboxSession,
     *,
     depth: int,
+    filenames: list[str] | None = None,
 ) -> list[BaseTool | dict[str, Any]]:
     tools: list[BaseTool | dict[str, Any]] = []
     workspace_tools = {row.name.lower(): row for row in validated.workspace_tools}
@@ -140,10 +148,6 @@ async def build_tools(
 
     if validated.selected_skills:
         tools.append(read_skill_tool(validated.resolved_skills))
-    if validated.knowledge_bases:
-        tools.append(
-            knowledge_search_tool([row.name for row in validated.knowledge_bases])
-        )
 
     tools.extend(await load_connector_tools(validated.connectors))
 
@@ -178,6 +182,11 @@ async def build_tools(
             spec = native_web_search_spec(validated.profile.provider)
             if spec is not None:
                 tools.append(spec)
+
+    # Files reach the model as data it can read with code, not as pre-extracted text.
+    # The subprocess fallback cannot honour the mount contract, so it gets no tool.
+    if validated.attached_documents and session.uses_docker:
+        tools.append(sandbox_python_tool(session, filenames or []))
 
     unique: list[BaseTool | dict[str, Any]] = []
     seen: set[str] = set()
@@ -234,31 +243,116 @@ def _graph_name(agent: Agent) -> str:
     return safe[:40] or "agent"
 
 
+ATTACHMENT_NAME_MAX = 120
+
+
+def _attachment_name(raw: str | None, fallback: str, used: set[str]) -> str:
+    """A name safe for `/app/data`: no separators, no leading dots, bounded, unique.
+
+    The cap keeps a hostile 255-character name from making the mount listing unreadable;
+    the dedupe keeps two files with the same name from overwriting each other, which
+    would silently hand the model one file when the agent attached two.
+    """
+    name = Path((raw or "").replace("\\", "/")).name
+    name = re.sub(r"[^A-Za-z0-9._ -]", "", name).lstrip(". ").strip()[:ATTACHMENT_NAME_MAX]
+    name = name or fallback
+    stem, suffix = Path(name).stem, Path(name).suffix
+    candidate = name
+    index = 2
+    while candidate in used:
+        room = ATTACHMENT_NAME_MAX - len(suffix) - len(f" ({index})")
+        candidate = f"{stem[:room]} ({index}){suffix}"
+        index += 1
+    return candidate
+
+
+async def _stage_files(documents: list[Document]) -> tuple[Path | None, list[str]]:
+    """Download the run's files into a directory the sandbox mounts read-only.
+
+    A missing object is logged and skipped rather than killing the run: the rest of the
+    files are still worth reading, and the model can say one name was not there.
+    """
+    if not documents:
+        return None, []
+    staging = Path(tempfile.mkdtemp(prefix="mokinjay-files-"))
+    storage = get_storage()
+    used: set[str] = set()
+    names: list[str] = []
+    for row in documents:
+        if not row.file_url:
+            continue
+        try:
+            data = await storage.download_file(row.file_url)
+        except StorageError:
+            logger.exception(f"Could not stage file {row.id}; it will be absent from /app/data")
+            continue
+        name = _attachment_name(row.filename, row.id, used)
+        used.add(name)
+        names.append(name)
+        (staging / name).write_bytes(data)
+    return staging, names
+
+
+def _open_session(
+    workspace_id: str, validated: ValidatedAgent, data_dir: str | None
+) -> tuple[SandboxSession, int]:
+    """The run's sandbox, plus the megabytes reserved for it (0 when there is nothing
+    to reserve). Callers must `release` the returned amount in their teardown.
+
+    A run with no attached files keeps the configured size: there is nothing to read,
+    so the tool-only tier is right and the budget is not touched.
+    """
+    config = SandboxConfig.from_settings()
+    reserved_mb = 0
+    if validated.attached_documents:
+        largest = max((row.file_size or 0) for row in validated.attached_documents)
+        config = config.tiered(largest)
+        if not reserve(workspace_id, config.memory_mb):
+            raise AgentRuntimeError(
+                "This workspace has too many sandbox runs in flight; try again when one finishes."
+            )
+        reserved_mb = config.memory_mb
+    session = SandboxSession(
+        config=config,
+        data_dir=data_dir,
+        tools=InMemoryToolSource({row.name: row.code for row in validated.workspace_tools}),
+    )
+    return session, reserved_mb
+
+
 def _subagent_runner(workspace_id: str, child_id: str, depth: int):
     async def run(task: str) -> str:
-        async with async_session() as db:
-            child = await db.get(Agent, child_id)
-            if child is None or child.workspace_id != workspace_id:
-                return "That subagent no longer exists."
-            data = await saved_input(db, child)
-            validated = await validate_agent(db, workspace_id, data, agent_id=child.id)
-            session = SandboxSession(
-                config=SandboxConfig.from_settings(),
-                tools=InMemoryToolSource(
-                    {row.name: row.code for row in validated.workspace_tools}
-                ),
-            )
-            try:
-                tools = await build_tools(db, workspace_id, validated, session, depth=depth)
-                graph = build_graph(validated, child, tools, streaming=False)
-            except Exception:
-                await asyncio.to_thread(session.close)
-                raise
+        session: SandboxSession | None = None
+        staging: Path | None = None
+        reserved_mb = 0
         try:
+            async with async_session() as db:
+                child = await db.get(Agent, child_id)
+                if child is None or child.workspace_id != workspace_id:
+                    return "That subagent no longer exists."
+                data = await saved_input(db, child)
+                validated = await validate_agent(db, workspace_id, data, agent_id=child.id)
+                staging, filenames = await _stage_files(validated.attached_documents)
+                session, reserved_mb = _open_session(
+                    workspace_id, validated, str(staging) if staging else None
+                )
+                tools = await build_tools(
+                    db, workspace_id, validated, session, depth=depth, filenames=filenames
+                )
+                graph = build_graph(validated, child, tools, streaming=False)
             result = await graph.ainvoke({"messages": [HumanMessage(content=task)]})
+            return _message_text(result.get("messages", [])[-1]) or "(the subagent returned no answer)"
         finally:
-            await asyncio.to_thread(session.close)
-        return _message_text(result.get("messages", [])[-1]) or "(the subagent returned no answer)"
+            try:
+                if session is not None:
+                    await asyncio.to_thread(session.close)
+            finally:
+                try:
+                    if reserved_mb:
+                        release(workspace_id, reserved_mb)
+                finally:
+                    if staging is not None:
+                        shutil.rmtree(staging, ignore_errors=True)
 
     return run
 
@@ -334,8 +428,6 @@ async def _bump_run_usage(db, workspace_id: str, validated: ValidatedAgent) -> N
         await bump_usage(db, workspace_id, "structured_output", validated.structured_output.id)
     for row in validated.selected_skills:
         await bump_usage(db, workspace_id, "skill", row.id)
-    for row in validated.knowledge_bases:
-        await bump_usage(db, workspace_id, "knowledge_base", row.id)
     for row in validated.connectors:
         await bump_usage(db, workspace_id, "connector", row.id)
     effective = {name.lower() for name in validated.effective_tools}
@@ -354,6 +446,8 @@ async def stream_chat(
 ) -> AsyncIterator[dict[str, Any]]:
     started = time.monotonic()
     session: SandboxSession | None = None
+    staging: Path | None = None
+    reserved_mb = 0
     try:
         async with async_session() as db:
             agent = (
@@ -369,13 +463,13 @@ async def stream_chat(
             validated = await validate_agent(
                 db, workspace_id, await saved_input(db, agent), agent_id=agent.id
             )
-            session = SandboxSession(
-                config=SandboxConfig.from_settings(),
-                tools=InMemoryToolSource(
-                    {row.name: row.code for row in validated.workspace_tools}
-                ),
+            staging, filenames = await _stage_files(validated.attached_documents)
+            session, reserved_mb = _open_session(
+                workspace_id, validated, str(staging) if staging else None
             )
-            tools = await build_tools(db, workspace_id, validated, session, depth=0)
+            tools = await build_tools(
+                db, workspace_id, validated, session, depth=0, filenames=filenames
+            )
             graph = build_graph(validated, agent, tools, streaming=True)
             await _bump_run_usage(db, workspace_id, validated)
             await db.commit()
@@ -474,5 +568,13 @@ async def stream_chat(
         await _mark_execution(execution_id, "failed", error=detail, started=started)
         yield {"event": "error", "data": {"detail": detail}}
     finally:
-        if session is not None:
-            await asyncio.to_thread(session.close)
+        try:
+            if session is not None:
+                await asyncio.to_thread(session.close)
+        finally:
+            try:
+                if reserved_mb:
+                    release(workspace_id, reserved_mb)
+            finally:
+                if staging is not None:
+                    shutil.rmtree(staging, ignore_errors=True)
