@@ -62,6 +62,35 @@ class TestDeleteWorkspace:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
+    async def test_delete_workspace_deletes_stored_files(
+        self, client, auth_headers, test_workspace, db_session, tmp_path, monkeypatch
+    ):
+        from app.models.knowledge import DOCUMENT_STATUS_STORED, Document
+        from app.services.storage import build_storage_key
+        from app.services.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage(tmp_path)
+        monkeypatch.setattr("app.routers.workspaces.get_storage", lambda: storage)
+
+        document = Document(
+            workspace_id=test_workspace.id,
+            filename="gone.txt",
+            status=DOCUMENT_STATUS_STORED,
+        )
+        db_session.add(document)
+        await db_session.flush()
+        key = build_storage_key(test_workspace.id, document.id)
+        document.file_url = key
+        await db_session.commit()
+        await storage.upload_file(key, b"bytes", content_type="text/plain")
+        assert await storage.exists(key)
+
+        response = await client.delete(f"/api/workspaces/{test_workspace.id}", headers=auth_headers)
+
+        assert response.status_code == 200
+        assert not await storage.exists(key)
+
+    @pytest.mark.asyncio
     async def test_delete_workspace_not_found(self, client, auth_headers):
         response = await client.delete("/api/workspaces/nonexistent", headers=auth_headers)
         assert response.status_code == 404

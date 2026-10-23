@@ -16,6 +16,7 @@ from app.schemas.workspace import (
 )
 from app.middleware.auth import get_current_user
 from app.middleware.rbac import require_workspace_role
+from app.services.storage import StorageError, get_storage
 from app.utils.errors import NotFoundException, ForbiddenException, BadRequestException
 
 router = APIRouter()
@@ -110,13 +111,29 @@ async def delete_workspace(
         raise NotFoundException("Workspace")
 
     # The folder FK is RESTRICT, so the rows must go before the workspace cascade can
-    # remove the folders. Bytes are still not deleted here; that gap predates this change.
+    # remove the folders. Keys are read first because the rows are gone after the commit.
+    keys = [
+        key
+        for key in (
+            await db.execute(
+                select(Document.file_url).where(Document.workspace_id == workspace_id)
+            )
+        ).scalars()
+        if key
+    ]
     document_ids = select(Document.id).where(Document.workspace_id == workspace_id)
     await db.execute(delete(AgentDocument).where(AgentDocument.document_id.in_(document_ids)))
     await db.execute(delete(Document).where(Document.workspace_id == workspace_id))
 
     await db.delete(workspace)
     await db.commit()
+
+    for key in keys:
+        try:
+            await get_storage().delete_file(key)
+        except StorageError:
+            logger.exception(f"Orphaned object left behind at {key!r}")
+
     logger.info(f"Workspace {workspace_id} deleted")
     return {"success": True}
 
