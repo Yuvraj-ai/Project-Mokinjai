@@ -57,27 +57,27 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-5 py-8 md:px-10 md:py-12">
-      <div className="mb-10 flex flex-col gap-6 animate-fade-in-up stagger-1 md:flex-row md:items-end md:justify-between">
-        <div className="max-w-xl">
-          <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-accent-warm">
-            <span className="size-2 rounded-full bg-accent-warm" />
-            Workspace overview
-          </div>
-          <h1 className="text-4xl font-display leading-none tracking-tight text-ink-900 dark:text-cream-100 md:text-5xl">
-            Build once. Run everywhere.
+    <div className="max-w-5xl mx-auto px-8 py-10">
+      <div className="flex items-end justify-between mb-10 animate-fade-in-up stagger-1">
+        <div>
+          <h1 className="text-3xl font-display text-ink-900 dark:text-cream-100 tracking-tight leading-none">
+            Workflows
           </h1>
-          <p className="mt-4 max-w-lg text-sm leading-6 text-ink-400 dark:text-ink-300 md:text-base">
-            Orchestrate prompts, tools, models, and knowledge into reliable AI workflows.
+          <p className="text-ink-400 dark:text-ink-300 mt-2 text-sm font-body">
+            Build and manage your AI agent workflows
           </p>
         </div>
         <button
           onClick={handleCreateWorkflow}
           disabled={creating}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink-800 px-5 text-sm font-semibold text-cream-50 shadow-lg shadow-ink-900/10 transition-all duration-200 hover:-translate-y-0.5 hover:bg-ink-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60 dark:bg-cream-100 dark:text-ink-900 dark:hover:bg-white"
+          className="inline-flex items-center gap-2 bg-ink-800 dark:bg-cream-200 hover:bg-ink-900 dark:hover:bg-cream-300 disabled:bg-ink-400 text-cream-50 dark:text-ink-800 font-body font-medium py-2 px-5 rounded-lg text-sm transition-all duration-200 hover:shadow-md"
         >
-          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          New workflow
+          {creating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          New Workflow
         </button>
       </div>
 

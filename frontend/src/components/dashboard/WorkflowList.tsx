@@ -82,15 +82,7 @@ export default function WorkflowList({ workspaceId }: WorkflowListProps) {
   }
 
   return (
-    <section aria-labelledby="workflow-list-heading">
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 id="workflow-list-heading" className="text-lg font-semibold tracking-tight text-ink-900 dark:text-cream-100">Your workflows</h2>
-          <p className="mt-1 text-sm text-ink-400 dark:text-ink-300">{workflows.length} active {workflows.length === 1 ? 'workflow' : 'workflows'}</p>
-        </div>
-        <span className="rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-400 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-300">All workflows</span>
-      </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
       {workflows.map((workflow, index) => (
         <div
           key={workflow.id}
@@ -104,7 +96,6 @@ export default function WorkflowList({ workspaceId }: WorkflowListProps) {
           />
         </div>
       ))}
-      </div>
-    </section>
+    </div>
   )
 }
