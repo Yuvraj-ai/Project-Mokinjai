@@ -36,7 +36,7 @@ export default function Navbar({ sidebarOpen, onToggleSidebar }: NavbarProps) {
     : (user?.email?.[0]?.toUpperCase() ?? 'U')
 
   return (
-    <header className="h-14 bg-white/80 dark:bg-ink-800/80 backdrop-blur-sm border-b border-ink-100/60 dark:border-ink-700/60 flex items-center justify-between px-4 md:px-6 shrink-0 z-30">
+    <header className="sticky top-0 h-16 bg-white/85 dark:bg-ink-800/85 backdrop-blur-xl border-b border-ink-100/70 dark:border-ink-700/70 flex items-center justify-between px-4 md:px-8 shrink-0 z-30">
       <div className="flex items-center gap-3">
         <button
           onClick={onToggleSidebar}
