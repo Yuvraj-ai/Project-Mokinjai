@@ -53,13 +53,13 @@ export default function Sidebar({ open }: SidebarProps) {
         className={`
           ${open ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0
-          fixed md:static top-14 left-0 z-20
-          ${isExpanded ? 'w-56' : 'w-16'}
-          bg-white dark:bg-ink-800
-          border-r border-ink-100/60 dark:border-ink-700/60
+          fixed md:sticky md:top-16 top-16 left-0 z-20
+          ${isExpanded ? 'w-60' : 'w-[4.5rem]'}
+          bg-white/70 dark:bg-ink-800/70 backdrop-blur-xl
+          border-r border-ink-100/70 dark:border-ink-700/70
           flex flex-col shrink-0
           transition-all duration-200 ease-out
-          h-[calc(100vh-3.5rem)]
+          h-[calc(100vh-4rem)]
         `}
       >
         <nav className="flex-1 px-2 py-3">
