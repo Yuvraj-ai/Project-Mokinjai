@@ -80,6 +80,16 @@ export default function PlaygroundPage() {
   }, [workspaceId, sessionId])
 
   const selectedAgent = agents.find((agent) => agent.id === agentId) ?? null
+  const activeSession = sessions.find((session) => session.id === sessionId) ?? null
+
+  const handleTurnEnded = useCallback(() => {
+    if (workspaceId && agentId) refreshSessions(agentId)
+    if (workspaceId && sessionId) {
+      getSession(workspaceId, sessionId)
+        .then((detail) => setMessages(detail.messages))
+        .catch(() => {})
+    }
+  }, [workspaceId, agentId, sessionId, refreshSessions])
 
   const handleCreate = async () => {
     if (!workspaceId || !agentId) return
@@ -150,7 +160,12 @@ export default function PlaygroundPage() {
             {error}
           </p>
         )}
-        <ThreadPane session={sessions.find((s) => s.id === sessionId) ?? null} messages={messages} />
+        <ThreadPane
+          workspaceId={workspaceId}
+          session={activeSession}
+          messages={messages}
+          onTurnEnded={handleTurnEnded}
+        />
       </div>
     </div>
   )
