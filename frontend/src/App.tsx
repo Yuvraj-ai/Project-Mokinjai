@@ -12,6 +12,7 @@ import SkillsPage from './pages/SkillsPage'
 import ToolsPage from './pages/ToolsPage'
 import ConnectorsPage from './pages/ConnectorsPage'
 import AgentsPage from './pages/AgentsPage'
+import PlaygroundPage from './pages/PlaygroundPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -22,6 +23,7 @@ export default function App() {
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/" element={<Navigate to="/workflows" replace />} />
         <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/playground" element={<PlaygroundPage />} />
         <Route path="/workflows" element={<DashboardPage />} />
         <Route path="/workflows/:workflowId/edit" element={<WorkflowEditorPage />} />
         <Route path="/executions" element={<ExecutionHistoryPage />} />
