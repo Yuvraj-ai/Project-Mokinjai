@@ -35,10 +35,8 @@ export default function NumberSlider({
 
   return (
     <label className="block">
-      <span className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-          {label}
-        </span>
+      <span className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium text-ink">{label}</span>
         <input
           type="number"
           value={text}
@@ -53,7 +51,7 @@ export default function NumberSlider({
             if (raw.trim() !== '' && Number.isFinite(parsed)) onChange(clamp(parsed))
           }}
           onBlur={() => setText(String(clamp(Number(text) || min)))}
-          className="w-20 rounded-md border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2 py-1 text-right font-mono text-xs text-ink-800 dark:text-cream-100 disabled:opacity-40"
+          className="w-20 rounded-md border border-line bg-surface px-2 py-1 text-right font-mono text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-40"
         />
       </span>
       <input
@@ -64,9 +62,9 @@ export default function NumberSlider({
         step={step}
         disabled={disabled}
         onChange={(event) => onChange(clamp(Number(event.target.value)))}
-        className="w-full accent-[#C4956A] disabled:opacity-40"
+        className="w-full accent-primary disabled:opacity-40"
       />
-      {hint && <span className="mt-1 block text-[10px] text-ink-400">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-ink-subtle">{hint}</span>}
     </label>
   )
 }

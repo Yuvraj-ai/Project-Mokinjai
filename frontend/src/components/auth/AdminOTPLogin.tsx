@@ -2,6 +2,8 @@ import { useState, FormEvent } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { sendAdminOTP } from '../../api/otp'
 import { Shield, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react'
+import Button from '../ui/Button'
+import { Callout } from '../ui/Feedback'
 
 export default function AdminOTPLogin() {
   const { adminOtpLogin } = useAuth()
@@ -42,46 +44,55 @@ export default function AdminOTPLogin() {
 
   if (!showOTP) {
     return (
-      <div className="mt-8 pt-8 border-t border-ink-200/50 dark:border-ink-700/50 animate-fade-in-up stagger-6">
+      <div className="mt-7 pt-7 border-t border-line animate-fade-in-up stagger-6">
         {error && (
-          <p className="mb-3 text-sm text-status-error">{error}</p>
+          <div className="mb-3">
+            <Callout tone="danger">{error}</Callout>
+          </div>
         )}
-        <button
-          onClick={handleRequestOTP}
+        <Button
+          variant="secondary"
           disabled={loading}
-          className="group w-full flex items-center justify-center gap-2.5 border border-ink-200 dark:border-ink-600 hover:border-ink-400 dark:hover:border-ink-500 disabled:border-ink-100 text-ink-600 dark:text-ink-300 hover:text-ink-900 dark:hover:text-cream-100 font-medium py-3 px-4 text-sm tracking-wide transition-all duration-300"
+          onClick={() => void handleRequestOTP()}
+          className="w-full h-10 py-2"
         >
-          <Shield className="w-4 h-4 text-accent-warm" />
+          <Shield className="w-4 h-4" aria-hidden />
           Admin Login via OTP
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="mt-8 pt-8 border-t border-ink-200/50 dark:border-ink-700/50 animate-fade-in">
-      <div className="flex items-center gap-2.5 mb-6">
-        <KeyRound className="w-4 h-4 text-accent-warm" />
-        <span className="text-xs font-medium text-ink-500 dark:text-ink-300 tracking-widest uppercase">
-          Telegram OTP
-        </span>
+    <div className="mt-7 pt-7 border-t border-line animate-fade-in">
+      <div className="flex items-center gap-2.5 mb-5">
+        <KeyRound className="w-4 h-4 text-ink-muted" aria-hidden />
+        <span className="text-[13px] font-medium text-ink">Telegram OTP</span>
       </div>
 
       {sent && (
-        <div className="mb-6 flex items-center gap-2.5 bg-status-success/5 border border-status-success/20 text-status-success rounded-sm px-4 py-3 text-sm animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>OTP sent to admin Telegram</span>
+        <div className="mb-5">
+          <Callout tone="success">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden />
+              OTP sent to admin Telegram
+            </span>
+          </Callout>
         </div>
       )}
 
       {error && (
-        <div className="mb-6 flex items-start gap-2.5 bg-status-error/5 border border-status-error/20 text-status-error rounded-sm px-4 py-3 text-sm animate-fade-in">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{error}</span>
+        <div className="mb-5">
+          <Callout tone="danger">
+            <span className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
+              {error}
+            </span>
+          </Callout>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div className="animate-fade-in-up">
           <input
             type="text"
@@ -92,26 +103,15 @@ export default function AdminOTPLogin() {
             required
             maxLength={6}
             placeholder="000000"
-            className="w-full text-center text-2xl font-mono tracking-[0.5em] py-4 bg-transparent border-b border-ink-200 dark:border-ink-600 text-ink-900 dark:text-cream-100 placeholder:text-ink-400 dark:placeholder:text-ink-500 focus:outline-none focus:border-accent-warm transition-colors duration-300"
+            className="w-full text-center text-2xl font-mono tracking-[0.5em] h-14 rounded-lg border border-line bg-surface text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
             autoComplete="off"
           />
         </div>
 
         <div className="animate-fade-in-up stagger-1">
-          <button
-            type="submit"
-            disabled={loading || otp.length !== 6}
-            className="group w-full flex items-center justify-center gap-3 bg-ink-900 dark:bg-cream-200 hover:bg-ink-800 dark:hover:bg-cream-300 disabled:bg-ink-400 text-cream-50 dark:text-ink-800 font-medium py-3.5 px-6 text-sm tracking-wide transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-accent-warm focus:ring-offset-2 focus:ring-offset-cream-50 dark:focus:ring-offset-ink-900"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-cream-50/30 border-t-cream-50 rounded-full animate-spin" />
-                Verifying
-              </span>
-            ) : (
-              'Verify & Login'
-            )}
-          </button>
+          <Button type="submit" loading={loading} disabled={otp.length !== 6} className="w-full h-10">
+            {loading ? 'Verifying' : 'Verify & Login'}
+          </Button>
         </div>
 
         <button
@@ -122,7 +122,7 @@ export default function AdminOTPLogin() {
             setError(null)
             setSent(false)
           }}
-          className="w-full text-ink-400 dark:text-ink-400 hover:text-ink-700 dark:hover:text-cream-200 text-xs tracking-widest uppercase py-2 transition-colors duration-300"
+          className="w-full text-ink-subtle hover:text-ink text-xs py-1 transition-colors duration-150"
         >
           Back to email
         </button>

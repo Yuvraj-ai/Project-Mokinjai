@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Loader2, Plus, Trash2 } from 'lucide-react'
+import { BookOpen, Plus, Trash2 } from 'lucide-react'
 import { listWorkspaces } from '../api/workspaces'
 import {
   SKILL_DESCRIPTION_MAX,
@@ -14,6 +14,9 @@ import {
   type SkillInput,
 } from '../api/skills'
 import SkillEditor from '../components/skills/SkillEditor'
+import Button from '../components/ui/Button'
+import { Spinner } from '../components/ui/Feedback'
+import { cn } from '../lib/utils'
 
 function axiosError(error: unknown): { status: number | null; detail: string | null } {
   if (!error || typeof error !== 'object' || !('response' in error)) {
@@ -154,48 +157,49 @@ export default function SkillsPage() {
 
   if (loading || !workspaceId) {
     return (
-      <div className="flex h-full items-center justify-center text-ink-400">
-        <Loader2 className="h-5 w-5 animate-spin" />
+      <div className="flex h-full items-center justify-center">
+        <Spinner />
       </div>
     )
   }
 
+  const labelClass = 'mb-1.5 block text-[13px] font-medium text-ink'
+  const inputClass =
+    'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring'
+
   return (
     <div className="flex h-full">
-      <aside className="w-72 shrink-0 border-r border-ink-100/60 dark:border-ink-700/60 p-4">
+      <aside className="w-72 shrink-0 border-r border-line bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-sm font-semibold text-ink-800 dark:text-cream-100">
-            <BookOpen className="h-4 w-4" /> Skills
+          <h1 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <BookOpen className="h-4 w-4" aria-hidden /> Skills
           </h1>
-          <button
-            type="button"
-            onClick={openNew}
-            className="flex items-center gap-1 rounded-lg bg-accent-warm px-2 py-1 text-xs text-white"
-          >
-            <Plus className="h-3 w-3" /> New
-          </button>
+          <Button size="sm" onClick={openNew}>
+            <Plus className="h-3.5 w-3.5" aria-hidden /> New
+          </Button>
         </div>
 
         {banner && (
-          <p className="mb-3 rounded-lg bg-cream-100 dark:bg-ink-700/60 px-2 py-1.5 text-[11px] text-ink-600 dark:text-ink-200">
+          <p className="mb-3 rounded-lg bg-surface-muted px-2.5 py-1.5 text-xs text-ink-muted">
             {banner}
           </p>
         )}
 
-        <ul className="space-y-1">
+        <ul className="space-y-0.5">
           {skills.map((skill) => (
-            <li key={skill.id} className="group flex items-center gap-2">
+            <li key={skill.id} className="group flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => openExisting(skill)}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-left text-xs font-body ${
+                className={cn(
+                  'flex-1 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors duration-150',
                   editor?.id === skill.id
-                    ? 'bg-ink-800/5 dark:bg-ink-600/50 text-ink-900 dark:text-cream-100'
-                    : 'text-ink-500 dark:text-ink-200 hover:bg-ink-50 dark:hover:bg-ink-700'
-                }`}
+                    ? 'bg-surface-muted text-ink'
+                    : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
+                )}
               >
                 <span className="font-mono">@{skill.name}</span>
-                <span className="mt-0.5 block truncate text-[10px] text-ink-400">
+                <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
                   {skill.description}
                 </span>
               </button>
@@ -203,14 +207,15 @@ export default function SkillsPage() {
                 type="button"
                 onClick={() => remove(skill)}
                 title="Delete skill"
-                className="text-ink-300 opacity-0 group-hover:opacity-100 hover:text-status-error"
+                aria-label={`Delete ${skill.name}`}
+                className="rounded p-1 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:bg-status-error-soft hover:text-status-error"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </li>
           ))}
           {skills.length === 0 && (
-            <li className="px-2 text-[11px] text-ink-400">
+            <li className="px-2 text-xs text-ink-subtle">
               No skills yet. Create one, then attach it to an agent.
             </li>
           )}
@@ -219,44 +224,38 @@ export default function SkillsPage() {
 
       <section className="flex-1 overflow-y-auto p-6">
         {!editor ? (
-          <p className="text-sm text-ink-400">Select a skill, or create a new one.</p>
+          <p className="text-sm text-ink-subtle">Select a skill, or create a new one.</p>
         ) : (
-          <div className="mx-auto max-w-3xl space-y-4">
+          <div className="mx-auto max-w-3xl space-y-5">
             <label className="block">
-              <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                Name
-              </span>
+              <span className={labelClass}>Name</span>
               <input
                 value={editor.name}
                 onChange={(event) => setEditor({ ...editor, name: event.target.value })}
                 placeholder="Writer"
-                className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-sm font-mono text-ink-800 dark:text-cream-100"
+                className={inputClass + ' font-mono'}
               />
-              <span className="mt-1 block text-[10px] text-ink-400">
+              <span className="mt-1 block text-xs text-ink-subtle">
                 Referenced as <code className="font-mono">@{editor.name || 'Name'}</code>
               </span>
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                Description — the line the model sees at startup
-              </span>
+              <span className={labelClass}>Description — the line the model sees at startup</span>
               <input
                 value={editor.description}
                 maxLength={SKILL_DESCRIPTION_MAX}
                 onChange={(event) => setEditor({ ...editor, description: event.target.value })}
                 placeholder="Sets the tone and voice for the agent."
-                className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-sm text-ink-800 dark:text-cream-100"
+                className={inputClass}
               />
-              <span className="mt-1 block font-mono text-[11px] text-ink-400">
+              <span className="mt-1 block font-mono text-[11px] text-ink-subtle">
                 - {editor.name || 'Name'}: {editor.description || '…'}
               </span>
             </label>
 
             <div>
-              <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                Instructions
-              </span>
+              <span className={labelClass}>Instructions</span>
               <SkillEditor
                 content={editor.content}
                 menu={menu}
@@ -265,28 +264,23 @@ export default function SkillsPage() {
             </div>
 
             {editor.referencedBy.length > 0 && (
-              <p className="rounded-lg bg-cream-100 dark:bg-ink-700/60 px-3 py-2 text-[11px] text-ink-600 dark:text-ink-200">
+              <p className="rounded-lg bg-surface-muted border border-line px-3 py-2 text-xs text-ink-muted">
                 Referenced by {editor.referencedBy.join(', ')}. Changes won&apos;t affect existing
                 agents until rebuilt.
               </p>
             )}
 
             {error && (
-              <p className="rounded-lg border border-status-error/40 px-3 py-2 text-xs text-status-error">
+              <p className="rounded-lg bg-status-error-soft px-3 py-2 text-[13px] text-status-error">
                 {error}
               </p>
             )}
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={save}
-                disabled={saving}
-                className="rounded-lg bg-accent-warm px-4 py-2 text-xs text-white disabled:opacity-50"
-              >
+              <Button onClick={save} loading={saving}>
                 {saving ? 'Saving…' : 'Save'}
-              </button>
-              <span className="text-[11px] text-ink-400">
+              </Button>
+              <span className="font-mono text-xs text-ink-subtle">
                 {editor.skillRefs.length} skill ref{editor.skillRefs.length === 1 ? '' : 's'},{' '}
                 {editor.toolRefs.length} tool ref{editor.toolRefs.length === 1 ? '' : 's'}
               </span>

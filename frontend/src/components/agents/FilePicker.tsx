@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AgentFolderRule } from '../../api/agents'
 import { axiosDetail } from '../../api/client'
 import { listDocuments, listFolders, type FileItem, type Folder } from '../../api/files'
+import Button from '../ui/Button'
 
 export interface FileSelection {
   folders: AgentFolderRule[]
@@ -37,7 +38,7 @@ function FolderBox({
       type="checkbox"
       checked={checked}
       onChange={onChange}
-      className="accent-[#C4956A]"
+      className="accent-primary"
     />
   )
 }
@@ -155,13 +156,21 @@ export default function FilePicker({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-ink-900/30 p-2 sm:p-4">
-      <div className="m-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-xl border border-ink-100/60 dark:border-ink-700/60 bg-white dark:bg-ink-800 shadow-xl">
-        <header className="border-b border-ink-100/60 dark:border-ink-700/60 px-5 py-3">
-          <h2 className="font-display text-base text-ink-800 dark:text-cream-100">Attach files</h2>
+    <div className="fixed inset-0 z-50 flex bg-black/40 p-2 sm:p-4 dark:bg-black/60">
+      <div className="m-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-drawer animate-scale-in">
+        <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
+          <h2 className="text-[15px] font-semibold text-ink">Attach files</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1 text-ink-subtle hover:text-ink hover:bg-surface-muted transition-colors"
+          >
+            ✕
+          </button>
         </header>
-        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-3 text-xs text-ink-600 dark:text-ink-200">
-          {loading && <p className="text-ink-400">Loading files…</p>}
+        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4 text-[13px] text-ink">
+          {loading && <p className="text-ink-muted">Loading files…</p>}
           {error && <p className="text-status-error">{error}</p>}
           {!loading && !error && (
             <>
@@ -172,7 +181,7 @@ export default function FilePicker({
                 return (
                   <div
                     key={folder.id}
-                    className="rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-2"
+                    className="rounded-lg border border-line p-2.5"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -184,24 +193,24 @@ export default function FilePicker({
                         <button
                           type="button"
                           onClick={() => toggleExpanded(folder.id)}
-                          className="font-semibold text-ink-800 dark:text-cream-100"
+                          className="text-[13px] font-medium text-ink"
                         >
                           {isOpen ? '▾' : '▸'} {folder.name}
                         </button>
                       </div>
-                      <span className="text-[10px] text-ink-400">
+                      <span className="font-mono text-[11px] text-ink-subtle">
                         {checkedCount} of {files.length} files
                       </span>
                     </div>
                     {isOpen && (
-                      <div className="mt-1 space-y-1 border-l border-ink-100 dark:border-ink-700 pl-3">
+                      <div className="mt-1.5 space-y-1.5 border-l border-line pl-3">
                         {files.map((file) => (
                           <label key={file.id} className="flex items-center gap-2">
                             <input
                               type="checkbox"
                               checked={checked.has(file.id)}
                               onChange={() => toggleFile(file.id)}
-                              className="accent-[#C4956A]"
+                              className="accent-primary"
                             />
                             <span>{file.filename ?? 'Untitled file'}</span>
                           </label>
@@ -212,15 +221,15 @@ export default function FilePicker({
                 )
               })}
               {unfiled.length > 0 && (
-                <div className="rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-2">
-                  <h3 className="mb-1 font-semibold text-ink-800 dark:text-cream-100">Unfiled</h3>
+                <div className="rounded-lg border border-line p-2.5">
+                  <h3 className="mb-1.5 text-[13px] font-medium text-ink">Unfiled</h3>
                   {unfiled.map((file) => (
                     <label key={file.id} className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={checked.has(file.id)}
                         onChange={() => toggleFile(file.id)}
-                        className="accent-[#C4956A]"
+                        className="accent-primary"
                       />
                       <span>{file.filename ?? 'Untitled file'}</span>
                     </label>
@@ -230,21 +239,13 @@ export default function FilePicker({
             </>
           )}
         </div>
-        <footer className="flex items-center justify-end gap-2 border-t border-ink-100/60 dark:border-ink-700/60 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-1.5 text-xs text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-700"
-          >
+        <footer className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-accent-warm px-4 py-1.5 text-xs text-white"
-          >
+          </Button>
+          <Button size="sm" onClick={onClose}>
             Done
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

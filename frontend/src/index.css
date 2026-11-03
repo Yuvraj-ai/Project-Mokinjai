@@ -2,45 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Design tokens (see .design-port/DESIGN_DECISIONS.md).
+
+  Roles are stable across themes; only values change. Components must use the
+  token utilities (bg-surface, text-ink-muted, border-line, ...) rather than
+  raw hex or theme-specific dark: variants.
+*/
 :root {
-  --background: #FDFCFA;
-  --foreground: #14171E;
-  --card: #FFFFFF;
-  --card-foreground: #14171E;
-  --primary: #1A1A2E;
-  --primary-foreground: #FDFCFA;
-  --secondary: #F8F6F1;
-  --secondary-foreground: #2A2F3A;
-  --muted: #F0F1F3;
-  --muted-foreground: #7C828E;
-  --accent: #C4956A;
-  --accent-foreground: #1A1A2E;
-  --destructive: #9B2226;
-  --destructive-foreground: #FDFCFA;
-  --border: #EDE9E0;
-  --input: #EDE9E0;
-  --ring: #C4956A;
-  --radius: 0.625rem;
+  --canvas: #F4F3F1;          /* page background: warm paper */
+  --surface: #FFFFFF;         /* cards, tables, inputs */
+  --surface-muted: #EFEDEA;   /* table header strip, active nav pill, hovers, code blocks */
+  --raised: #FFFFFF;          /* floating layers: menus, popovers */
+  --line: #E4E2DD;            /* hairline borders */
+  --line-strong: #D2CFC8;     /* hovered / emphasized borders */
+
+  --text: #171715;
+  --text-muted: #6E6C66;
+  --text-subtle: #98968F;
+
+  --primary: #141414;         /* the one filled button */
+  --primary-hover: #2E2C29;
+  --primary-fg: #FFFFFF;
+  --ring: #171715;            /* monochrome focus ring (user override) */
+
+  --success: #1B7F4B;  --success-soft: #E8F3EC;
+  --warning: #B45309;  --warning-soft: #FBF3E4;
+  --danger:  #DC2626;  --danger-soft:  #FDECEC;
+  --info:    #4F46E5;  --info-soft:    #EEF0FE;
+
+  --chart-1: #171715;         /* data series: gray steps, no hue */
+  --chart-2: #8D8B85;
 }
 
 .dark {
-  --background: #0C0E13;
-  --foreground: #F0F1F3;
-  --card: #14171E;
-  --card-foreground: #F0F1F3;
-  --primary: #F0F1F3;
-  --primary-foreground: #0C0E13;
-  --secondary: #1E222B;
-  --secondary-foreground: #D4D7DC;
-  --muted: #1E222B;
-  --muted-foreground: #7C828E;
-  --accent: #C4956A;
-  --accent-foreground: #0C0E13;
-  --destructive: #DC2626;
-  --destructive-foreground: #FDFCFA;
-  --border: #2A2F3A;
-  --input: #2A2F3A;
-  --ring: #C4956A;
+  --canvas: #151412;
+  --surface: #1E1C19;
+  --surface-muted: #2A2825;
+  --raised: #26231F;          /* elevated = lighter in dark */
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  --text: #ECEBE8;
+  --text-muted: #A8A49C;
+  --text-subtle: #7C7970;
+
+  --primary: #ECEBE8;         /* inverted fill in dark */
+  --primary-hover: #FFFFFF;
+  --primary-fg: #151412;
+  --ring: #ECEBE8;
+
+  --success: #4CC38A;  --success-soft: rgba(76, 195, 138, 0.14);
+  --warning: #E5A158;  --warning-soft: rgba(229, 161, 88, 0.14);
+  --danger:  #F87171;  --danger-soft:  rgba(248, 113, 113, 0.14);
+  --info:    #9B9AF3;  --info-soft:    rgba(155, 154, 243, 0.14);
+
+  --chart-1: #ECEBE8;
+  --chart-2: #7C7970;
 }
 
 * {
@@ -57,9 +75,9 @@ html {
 }
 
 body {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  background-color: var(--background);
-  color: var(--foreground);
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--canvas);
+  color: var(--text);
   min-height: 100vh;
   line-height: 1.6;
   letter-spacing: -0.011em;
@@ -70,8 +88,12 @@ body {
 }
 
 ::selection {
-  background-color: #C4956A30;
-  color: #1A1A2E;
+  background-color: rgba(23, 23, 21, 0.12);
+  color: var(--text);
+}
+
+.dark ::selection {
+  background-color: rgba(236, 235, 232, 0.2);
 }
 
 ::-webkit-scrollbar {
@@ -84,20 +106,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D4D7DC;
+  background: var(--line-strong);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #A8ADB6;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: #3D4451;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #5A6170;
+  background: var(--text-subtle);
 }
 
 @keyframes fadeIn {
@@ -161,12 +175,17 @@ body {
 
 .editorial-rule {
   height: 1px;
-  background: linear-gradient(90deg, transparent, #DDD7CA, transparent);
+  background: var(--line);
 }
 
 .editorial-rule-left {
   height: 1px;
-  background: linear-gradient(90deg, #C4956A, transparent);
+  background: var(--line-strong);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 input:focus, textarea:focus, select:focus {

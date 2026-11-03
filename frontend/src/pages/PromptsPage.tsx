@@ -14,7 +14,7 @@ export default function PromptsPage() {
   if (!workspaceId) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-6 w-6 border-2 border-ink-200 border-t-accent" />
+        <div className="animate-spin rounded-full h-6 w-6 border-2 border-line border-t-primary" />
       </div>
     )
   }

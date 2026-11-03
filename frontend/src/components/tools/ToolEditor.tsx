@@ -82,40 +82,40 @@ export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Prop
   const schema = validation?.valid ? validation.schema : null
 
   return (
-    <div className="mb-8 rounded-xl border border-ink-100/60 dark:border-ink-700/60 bg-white dark:bg-ink-800 p-5">
+    <div className="mb-8 rounded-xl border border-line dark:border-line bg-surface dark:bg-surface p-5">
       <div className="flex items-end justify-between gap-4 mb-3">
         <div className="min-w-0">
-          <div className="font-display text-2xl text-ink-900 dark:text-cream-100 truncate">
+          <div className="font-display text-2xl text-ink truncate">
             {tool ? tool.name : 'New tool'}
           </div>
-          <p className="text-xs font-body text-ink-400 mt-1">
+          <p className="text-xs font-body text-ink-muted mt-1">
             One Python function. Its docstring and type hints become the schema the model sees.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setCode(EXAMPLE)}
-            className="rounded-lg border border-ink-100 dark:border-ink-600 px-3 py-1.5 text-xs font-body text-ink-500 dark:text-ink-200"
+            className="rounded-lg border border-line dark:border-line px-3 py-1.5 text-xs font-body text-ink-muted"
           >
             Reset example
           </button>
           <button
             onClick={onClose}
-            className="rounded-lg border border-ink-100 dark:border-ink-600 px-3 py-1.5 text-xs font-body text-ink-500 dark:text-ink-200"
+            className="rounded-lg border border-line dark:border-line px-3 py-1.5 text-xs font-body text-ink-muted"
           >
             Close
           </button>
           <button
             onClick={() => void save()}
             disabled={saving || !validation?.valid}
-            className="inline-flex items-center gap-2 rounded-lg bg-ink-800 dark:bg-cream-200 px-4 py-1.5 text-sm font-body font-medium text-cream-50 dark:text-ink-800 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-sm font-body font-medium text-primary-fg disabled:opacity-60"
           >
             {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save
           </button>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50">
+      <div className="overflow-hidden rounded-lg border border-line dark:border-line bg-surface-muted">
         <CodeMirror
           value={code}
           height="320px"
@@ -142,7 +142,7 @@ export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Prop
 
       <div className="mt-4 space-y-3">
         {validation === null && (
-          <p className="text-xs font-body text-ink-400">Checking the code…</p>
+          <p className="text-xs font-body text-ink-muted">Checking the code…</p>
         )}
 
         {validation && !validation.valid && (
@@ -162,18 +162,18 @@ export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Prop
 
         {schema && (
           <>
-            <div className="rounded-lg border border-ink-100 dark:border-ink-700 px-3 py-2.5">
-              <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-400 mb-1">
+            <div className="rounded-lg border border-line dark:border-line px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-muted mb-1">
                 Description the model sees
               </p>
-              <p className="text-sm font-body text-ink-700 dark:text-cream-200">
+              <p className="text-sm font-body text-ink">
                 {schema.description}
               </p>
             </div>
 
             <table className="w-full text-left">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-ink-400">
+                <tr className="text-[10px] uppercase tracking-wider text-ink-muted">
                   <th className="pb-1 font-semibold">Parameter</th>
                   <th className="pb-1 font-semibold">Type</th>
                   <th className="pb-1 font-semibold">Required</th>
@@ -184,25 +184,25 @@ export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Prop
                 {schema.parameters.map((parameter) => (
                   <tr
                     key={parameter.name}
-                    className="border-t border-ink-100/60 dark:border-ink-700/60"
+                    className="border-t border-line"
                   >
-                    <td className="py-1.5 font-mono text-xs text-ink-800 dark:text-cream-100">
+                    <td className="py-1.5 font-mono text-xs text-ink">
                       {parameter.name}
                     </td>
-                    <td className="py-1.5 font-mono text-xs text-ink-500 dark:text-ink-200">
+                    <td className="py-1.5 font-mono text-xs text-ink-muted">
                       {parameterTypeLabel(parameter)}
                     </td>
-                    <td className="py-1.5 font-body text-xs text-ink-500 dark:text-ink-200">
+                    <td className="py-1.5 font-body text-xs text-ink-muted">
                       {parameter.required ? 'yes' : 'no'}
                     </td>
-                    <td className="py-1.5 font-body text-xs text-ink-500 dark:text-ink-200">
+                    <td className="py-1.5 font-body text-xs text-ink-muted">
                       {parameter.description}
                     </td>
                   </tr>
                 ))}
                 {schema.parameters.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-2 text-xs font-body text-ink-400">
+                    <td colSpan={4} className="py-2 text-xs font-body text-ink-muted">
                       This tool takes no parameters.
                     </td>
                   </tr>
@@ -210,7 +210,7 @@ export default function ToolEditor({ workspaceId, tool, onSaved, onClose }: Prop
               </tbody>
             </table>
 
-            <p className="text-xs font-body text-ink-400">
+            <p className="text-xs font-body text-ink-muted">
               Returns <span className="font-mono">{schema.returns}</span>
             </p>
 

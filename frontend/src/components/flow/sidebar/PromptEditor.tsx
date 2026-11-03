@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, GripVertical } from 'lucide-react'
 import { createPrompt, updatePrompt, type PromptTemplate } from '../../../api/prompts'
+import Button from '../../ui/Button'
 
 interface PromptEditorProps {
   workspaceId: string
@@ -101,67 +102,70 @@ export default function PromptEditor({ workspaceId, prompt, onClose, onSaved }: 
 
   const tokenCount = estimateTokens(content)
 
+  const labelClass = 'mb-1.5 block text-[13px] font-medium text-ink'
+  const controlClass =
+    'w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring transition-colors'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" onClick={onClose} />
       <div
-        className="relative bg-white dark:bg-ink-800 rounded-xl shadow-2xl border border-ink-100/60 dark:border-ink-700/60 flex flex-col overflow-hidden"
+        className="relative bg-surface rounded-2xl shadow-drawer border border-line flex flex-col overflow-hidden animate-scale-in"
         style={{ width: size.width, height: size.height }}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-ink-100/60 dark:border-ink-700/60">
-          <h2 className="text-sm font-body font-semibold text-ink-800 dark:text-cream-100">{prompt ? 'Edit Prompt' : 'New Prompt'}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-ink-50 dark:hover:bg-ink-700 text-ink-400 transition-colors"><X className="w-4 h-4" /></button>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-line">
+          <h2 className="text-[15px] font-semibold text-ink">{prompt ? 'Edit Prompt' : 'New Prompt'}</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1 rounded-md hover:bg-surface-muted text-ink-subtle hover:text-ink transition-colors"><X className="w-4 h-4" /></button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-3">
+        <div className="flex-1 overflow-auto p-5 space-y-4">
           <div>
-            <label className="block text-[10px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider mb-1">Name</label>
+            <label className={labelClass}>Name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Prompt name"
-              className="w-full text-sm font-body border border-ink-100/60 dark:border-ink-600 rounded-lg px-3 py-2 bg-ink-50/30 dark:bg-ink-700/50 text-ink-700 dark:text-cream-200 placeholder-ink-300 focus:outline-none focus:ring-1 focus:ring-accent-warm/40 focus:border-accent-warm transition-all" />
+              className={controlClass + ' text-sm'} />
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider mb-1">Description</label>
+            <label className={labelClass}>Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description..." rows={2}
-              className="w-full text-xs font-body border border-ink-100/60 dark:border-ink-600 rounded-lg px-3 py-2 bg-ink-50/30 dark:bg-ink-700/50 text-ink-700 dark:text-cream-200 placeholder-ink-300 focus:outline-none focus:ring-1 focus:ring-accent-warm/40 focus:border-accent-warm resize-none transition-all" />
+              className={controlClass + ' text-sm resize-none'} />
           </div>
           <div className="flex-1">
-            <label className="block text-[10px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider mb-1">System Prompt</label>
+            <label className={labelClass}>System Prompt</label>
             <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Write your system prompt here. Use {variable_name} for variables..."
-              className="w-full text-xs font-mono border border-ink-100/60 dark:border-ink-600 rounded-lg px-3 py-2 bg-ink-50/30 dark:bg-ink-700/50 text-ink-700 dark:text-cream-200 placeholder-ink-300 focus:outline-none focus:ring-1 focus:ring-accent-warm/40 focus:border-accent-warm resize-none transition-all"
+              className={controlClass + ' text-[13px] font-mono resize-none'}
               style={{ minHeight: 200 }} />
           </div>
         </div>
 
-        <div className="flex items-end justify-between px-4 py-3 border-t border-ink-100/60 dark:border-ink-700/60">
-          <div className="flex-1 max-w-[200px]">
-            <label className="block text-[10px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider mb-1">Variables</label>
+        <div className="flex items-end justify-between px-5 py-3.5 border-t border-line">
+          <div className="flex-1 max-w-[220px]">
+            <label className="mb-1.5 block text-[13px] font-medium text-ink">Variables</label>
             <div className="space-y-1 max-h-24 overflow-y-auto">
-              {variables.length === 0 && <p className="text-[10px] text-ink-300 dark:text-ink-400 italic">No variables detected</p>}
+              {variables.length === 0 && <p className="text-xs text-ink-subtle italic">No variables detected</p>}
               {variables.map((v) => (
-                <div key={v.name} className="flex items-center gap-2 text-[11px]">
-                  <button onClick={() => toggleCompulsory(v.name)} className={`w-3 h-3 rounded-full border transition-colors ${v.compulsory ? 'bg-accent-warm border-accent-warm' : 'bg-transparent border-ink-300 dark:border-ink-500'}`} title={v.compulsory ? 'Compulsory' : 'Optional'} />
-                  <span className="font-mono text-ink-600 dark:text-cream-200">{`{${v.name}}`}</span>
-                  <button onClick={() => removeVariable(v.name)} className="text-ink-300 hover:text-status-error ml-auto"><X className="w-3 h-3" /></button>
+                <div key={v.name} className="flex items-center gap-2 text-xs">
+                  <button onClick={() => toggleCompulsory(v.name)} aria-label={v.compulsory ? 'Compulsory' : 'Optional'} className={`w-3 h-3 rounded-full border transition-colors ${v.compulsory ? 'bg-primary border-primary' : 'bg-transparent border-line-strong'}`} title={v.compulsory ? 'Compulsory' : 'Optional'} />
+                  <span className="font-mono text-ink">{`{${v.name}}`}</span>
+                  <button onClick={() => removeVariable(v.name)} aria-label="Remove variable" className="text-ink-subtle hover:text-status-error ml-auto"><X className="w-3 h-3" /></button>
                 </div>
               ))}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <span
-              className="text-xs font-mono text-ink-400 dark:text-ink-300 px-2 py-1 bg-ink-50 dark:bg-ink-700 rounded"
+              className="text-xs font-mono text-ink-muted px-2 py-1 bg-surface-muted border border-line rounded-md"
               title="Live estimate while typing. The saved prompt shows the exact tiktoken count."
             >
               ~{tokenCount} tokens
             </span>
-            <button onClick={onClose} className="px-3 py-1.5 text-xs font-body font-medium text-ink-500 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-700 rounded-lg transition-colors">Discard</button>
-            <button onClick={handleSave} disabled={saving || !name.trim() || !content.trim()}
-              className="px-4 py-1.5 text-xs font-body font-medium bg-ink-800 dark:bg-cream-200 text-cream-50 dark:text-ink-800 rounded-lg hover:bg-ink-900 dark:hover:bg-cream-300 disabled:opacity-50 transition-colors">
-              {saving ? 'Saving...' : 'Save'}
-            </button>
+            <Button variant="ghost" size="sm" onClick={onClose}>Discard</Button>
+            <Button size="sm" loading={saving} disabled={!name.trim() || !content.trim()} onClick={handleSave}>
+              Save
+            </Button>
           </div>
         </div>
 
-        <div onMouseDown={handleDragStart} className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize flex items-center justify-center text-ink-300">
+        <div onMouseDown={handleDragStart} className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize flex items-center justify-center text-ink-subtle">
           <GripVertical className="w-3 h-3 rotate-45" />
         </div>
       </div>

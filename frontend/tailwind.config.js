@@ -1,44 +1,78 @@
 /** @type {import('tailwindcss').Config} */
+
+/*
+  Semantic tokens map to CSS variables in src/index.css (light + .dark).
+  The legacy cream/ink-numeric/accent scales were removed at the end of the
+  port once grep confirmed zero usages. Only the semantic text-ink tiers
+  (DEFAULT/muted/subtle) remain.
+*/
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
-        display: ["'Instrument Serif'", 'Georgia', 'serif'],
-        body: ["'DM Sans'", 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        // retired serif alias: font-display now renders the UI sans
+        display: ['Inter', 'system-ui', 'sans-serif'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
         mono: ["'JetBrains Mono'", 'ui-monospace', 'monospace'],
       },
       colors: {
-        cream: {
-          50: '#FDFCFA',
-          100: '#F8F6F1',
-          200: '#EDE9E0',
-          300: '#DDD7CA',
+        canvas: 'var(--canvas)',
+        surface: {
+          DEFAULT: 'var(--surface)',
+          muted: 'var(--surface-muted)',
+          raised: 'var(--raised)',
         },
-        ink: {
-          50: '#F0F1F3',
-          100: '#D4D7DC',
-          200: '#A8ADB6',
-          300: '#7C828E',
-          400: '#5A6170',
-          500: '#3D4451',
-          600: '#2A2F3A',
-          700: '#1E222B',
-          800: '#14171E',
-          900: '#0C0E13',
+        line: {
+          DEFAULT: 'var(--line)',
+          strong: 'var(--line-strong)',
         },
-        accent: {
-          DEFAULT: '#1A1A2E',
-          warm: '#C4956A',
-          muted: '#B8A99A',
+        primary: {
+          DEFAULT: 'var(--primary)',
+          hover: 'var(--primary-hover)',
+          fg: 'var(--primary-fg)',
+        },
+        ring: {
+          DEFAULT: 'var(--ring)',
         },
         status: {
-          success: '#2D6A4F',
-          error: '#9B2226',
-          warning: '#BC6C25',
-          info: '#264653',
+          success: {
+            DEFAULT: 'var(--success)',
+            soft: 'var(--success-soft)',
+          },
+          warning: {
+            DEFAULT: 'var(--warning)',
+            soft: 'var(--warning-soft)',
+          },
+          error: {
+            DEFAULT: 'var(--danger)',
+            soft: 'var(--danger-soft)',
+          },
+          info: {
+            DEFAULT: 'var(--info)',
+            soft: 'var(--info-soft)',
+          },
         },
+        chart: {
+          1: 'var(--chart-1)',
+          2: 'var(--chart-2)',
+        },
+        ink: {
+          // new semantic text tiers
+          DEFAULT: 'var(--text)',
+          muted: 'var(--text-muted)',
+          subtle: 'var(--text-subtle)',
+        },
+      },
+      boxShadow: {
+        menu: '0 4px 16px rgba(20, 20, 18, 0.08)',
+        drawer: '0 12px 40px rgba(20, 20, 18, 0.16)',
+      },
+      accentColor: {
+        primary: 'var(--primary)',
+        ink: 'var(--text)',
       },
       animation: {
         'fade-in': 'fadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards',

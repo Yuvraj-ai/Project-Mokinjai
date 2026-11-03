@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { listWorkspaces, createWorkspace } from '../api/workspaces'
 import { createWorkflow } from '../api/workflows'
 import WorkflowList from '../components/dashboard/WorkflowList'
-import { Plus, Loader2 } from 'lucide-react'
+import Button from '../components/ui/Button'
+import { Spinner } from '../components/ui/Feedback'
+import { Plus } from 'lucide-react'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -51,38 +53,30 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-6 h-6 text-accent animate-spin" />
+        <Spinner className="w-6 h-6" />
       </div>
     )
   }
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-10">
-      <div className="flex items-end justify-between mb-10 animate-fade-in-up stagger-1">
+      <div className="flex items-start justify-between mb-10 animate-fade-in-up stagger-1" data-od-id="dashboard-header">
         <div>
-          <h1 className="text-3xl font-display text-ink-900 dark:text-cream-100 tracking-tight leading-none">
+          <h1 className="text-2xl font-semibold text-ink tracking-tight leading-tight">
             Workflows
           </h1>
-          <p className="text-ink-400 dark:text-ink-300 mt-2 text-sm font-body">
-            Build and manage your AI agent workflows
+          <p className="text-ink-muted mt-1 text-sm max-w-md">
+            Build and manage your AI agent workflows and pipelines.
           </p>
         </div>
-        <button
-          onClick={handleCreateWorkflow}
-          disabled={creating}
-          className="inline-flex items-center gap-2 bg-ink-800 dark:bg-cream-200 hover:bg-ink-900 dark:hover:bg-cream-300 disabled:bg-ink-400 text-cream-50 dark:text-ink-800 font-body font-medium py-2 px-5 rounded-lg text-sm transition-all duration-200 hover:shadow-md"
-        >
-          {creating ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Plus className="w-4 h-4" />
-          )}
+        <Button onClick={handleCreateWorkflow} loading={creating}>
+          <Plus className="w-4 h-4" aria-hidden />
           New Workflow
-        </button>
+        </Button>
       </div>
 
       {workspaceId && (
-        <div className="animate-fade-in-up stagger-2">
+        <div className="animate-fade-in-up stagger-2" data-od-id="workflows-grid">
           <WorkflowList workspaceId={workspaceId} key={refreshKey} />
         </div>
       )}

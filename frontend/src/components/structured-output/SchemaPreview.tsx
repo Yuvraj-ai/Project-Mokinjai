@@ -21,29 +21,29 @@ export default function SchemaPreview({ schema }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800">
+    <div className="rounded-lg border border-line bg-surface">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center justify-between px-3 py-2 text-left"
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-body text-ink-500 dark:text-ink-200">
-          {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        <span className="inline-flex items-center gap-2 text-[13px] font-medium text-ink">
+          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           Compiled JSON Schema
         </span>
-        <span className="text-[10px] text-ink-400">read-only</span>
+        <span className="font-mono text-[11px] text-ink-muted">read-only</span>
       </button>
 
       {open && (
-        <div className="relative border-t border-cream-200 dark:border-ink-700">
+        <div className="relative border-t border-line">
           <button
             type="button"
             onClick={() => void copy()}
-            className="absolute right-2 top-2 inline-flex items-center gap-1 rounded border border-ink-100 dark:border-ink-600 bg-white/90 dark:bg-ink-800/90 px-1.5 py-0.5 text-[10px] font-body text-ink-500 dark:text-ink-200"
+            className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-line bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Copy className="w-3 h-3" /> {copied ? 'copied' : 'copy'}
+            <Copy className="w-3 h-3" aria-hidden /> {copied ? 'copied' : 'copy'}
           </button>
-          <pre className="max-h-72 overflow-auto p-3 text-[11px] leading-relaxed font-mono text-ink-500 dark:text-ink-200">
+          <pre className="max-h-72 overflow-auto p-3 text-xs leading-relaxed font-mono text-ink-subtle">
             {text}
           </pre>
         </div>

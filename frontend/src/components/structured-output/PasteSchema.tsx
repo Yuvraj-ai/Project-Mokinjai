@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { OutputField } from '../../api/structuredOutputs'
+import Button from '../ui/Button'
 
 interface Props {
   /** Runs the parse against the backend; resolves to the converted fields. */
@@ -41,8 +42,8 @@ export default function PasteSchema({ onParse, onUse }: Props) {
   }
 
   return (
-    <div className="space-y-2">
-      <p className="text-[11px] font-body text-ink-400">
+    <div className="space-y-3">
+      <p className="text-xs text-ink-muted leading-relaxed">
         Paste a JSON Schema and it is converted into fields. References resolve against outputs you
         have already saved.
       </p>
@@ -52,20 +53,15 @@ export default function PasteSchema({ onParse, onUse }: Props) {
         rows={10}
         spellCheck={false}
         placeholder={EXAMPLE}
-        className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 p-3 text-[11px] leading-relaxed font-mono text-ink-800 dark:text-cream-100"
+        className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs leading-relaxed font-mono text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring"
       />
       {error && (
-        <p className="text-xs font-body text-status-error whitespace-pre-wrap">{error}</p>
+        <p className="text-xs text-status-error whitespace-pre-wrap">{error}</p>
       )}
-      <button
-        type="button"
-        onClick={() => void parse()}
-        disabled={parsing || !raw.trim()}
-        className="inline-flex items-center gap-2 rounded-lg bg-ink-800 dark:bg-cream-200 px-4 py-1.5 text-xs font-body font-medium text-cream-50 dark:text-ink-800 disabled:opacity-50"
-      >
-        {parsing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+      <Button disabled={parsing || !raw.trim()} onClick={() => void parse()} className="w-full sm:w-auto">
+        {parsing && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />}
         Parse
-      </button>
+      </Button>
     </div>
   )
 }

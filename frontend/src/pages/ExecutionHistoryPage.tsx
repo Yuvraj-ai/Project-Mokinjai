@@ -4,21 +4,24 @@ import { listWorkspaces } from '../api/workspaces'
 import { useExecutionStore } from '../store/executionStore'
 import { CheckCircle, XCircle, Clock, Loader2, History } from 'lucide-react'
 import type { Execution } from '../types/execution'
+import { EmptyState, Spinner } from '../components/ui/Feedback'
+import Badge from '../components/ui/Badge'
+import { TableFrame, Table, Th, Td, Tr } from '../components/ui/Table'
 
 const statusIcons: Record<string, React.ReactNode> = {
-  pending: <Clock className="w-3.5 h-3.5 text-status-warning" />,
-  running: <Loader2 className="w-3.5 h-3.5 text-status-info animate-spin" />,
-  completed: <CheckCircle className="w-3.5 h-3.5 text-status-success" />,
-  failed: <XCircle className="w-3.5 h-3.5 text-status-error" />,
-  cancelled: <XCircle className="w-3.5 h-3.5 text-ink-300" />,
+  pending: <Clock className="w-3.5 h-3.5" aria-hidden />,
+  running: <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />,
+  completed: <CheckCircle className="w-3.5 h-3.5" aria-hidden />,
+  failed: <XCircle className="w-3.5 h-3.5" aria-hidden />,
+  cancelled: <XCircle className="w-3.5 h-3.5" aria-hidden />,
 }
 
-const statusColors: Record<string, string> = {
-  pending: 'bg-status-warning/10 text-status-warning',
-  running: 'bg-status-info/10 text-status-info',
-  completed: 'bg-status-success/10 text-status-success',
-  failed: 'bg-status-error/10 text-status-error',
-  cancelled: 'bg-ink-100 text-ink-400',
+const statusTones: Record<string, 'neutral' | 'success' | 'warning' | 'danger' | 'info'> = {
+  pending: 'warning',
+  running: 'info',
+  completed: 'success',
+  failed: 'danger',
+  cancelled: 'neutral',
 }
 
 export default function ExecutionHistoryPage() {
@@ -49,70 +52,72 @@ export default function ExecutionHistoryPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-accent" />
+        <Spinner className="w-6 h-6" />
       </div>
     )
   }
 
   return (
     <div className="p-8">
-      <div className="flex items-center gap-3 mb-8 animate-fade-in">
-        <History className="w-6 h-6 text-ink-300" />
-        <h1 className="font-display text-3xl font-normal text-ink-800 dark:text-cream-100">Execution History</h1>
+      <div className="mb-8 animate-fade-in">
+        <h1 className="text-2xl font-semibold text-ink tracking-tight">Execution History</h1>
+        <p className="mt-1 text-sm text-ink-muted">Every workflow and chat run, newest first.</p>
       </div>
 
       {executions.length === 0 ? (
-        <div className="text-center py-16 animate-fade-in">
-          <History className="w-12 h-12 mx-auto mb-4 text-ink-200" />
-          <p className="font-display text-xl text-ink-400 mb-1">No executions yet</p>
-          <p className="font-body text-sm text-ink-300">Run a workflow to see execution history here</p>
+        <div className="bg-surface border border-line rounded-xl animate-fade-in">
+          <EmptyState
+            icon={History}
+            title="No executions yet"
+            description="Run a workflow to see execution history here"
+          />
         </div>
       ) : (
-        <div className="bg-cream-50 rounded-xl border border-cream-200 shadow-sm overflow-hidden animate-fade-in-up">
-          <table className="w-full">
+        <TableFrame className="animate-fade-in-up">
+          <Table>
             <thead>
-              <tr className="bg-cream-100 border-b border-cream-200">
-                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Status</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Execution ID</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Trigger</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Duration</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Tokens</th>
-                <th className="text-left px-4 py-3 text-[10px] font-semibold text-ink-300 uppercase tracking-widest">Created</th>
+              <tr>
+                <Th>Status</Th>
+                <Th>Execution ID</Th>
+                <Th>Trigger</Th>
+                <Th numeric>Duration</Th>
+                <Th numeric>Tokens</Th>
+                <Th>Created</Th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-cream-200">
+            <tbody>
               {executions.map((exec, i) => (
-                <tr
+                <Tr
                   key={exec.id}
-                  className={`group cursor-pointer hover:bg-cream-100 transition-all duration-300 animate-fade-in stagger-${Math.min(i + 1, 8)}`}
                   onClick={() => setExecution(exec)}
+                  className={`animate-fade-in stagger-${Math.min(i + 1, 8)}`}
                 >
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${statusColors[exec.status] || ''}`}>
+                  <Td>
+                    <span className="inline-flex items-center gap-1.5">
                       {statusIcons[exec.status]}
-                      {exec.status}
+                      <Badge tone={statusTones[exec.status] ?? 'neutral'} dot>
+                        {exec.status}
+                      </Badge>
                     </span>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-ink-400">
-                    {exec.id.slice(0, 8)}...
-                  </td>
-                  <td className="px-4 py-3 font-body text-[11px] text-ink-500 capitalize">
-                    {exec.trigger_type || '-'}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-ink-400">
+                  </Td>
+                  <Td mono className="text-ink-muted">
+                    {exec.id.slice(0, 8)}…
+                  </Td>
+                  <Td className="capitalize">{exec.trigger_type || '-'}</Td>
+                  <Td numeric className="text-ink-muted">
                     {exec.execution_time_ms != null ? `${exec.execution_time_ms}ms` : '-'}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-ink-400">
+                  </Td>
+                  <Td numeric className="text-ink-muted">
                     {exec.token_usage?.total_tokens || '-'}
-                  </td>
-                  <td className="px-4 py-3 font-body text-[11px] text-ink-300">
+                  </Td>
+                  <Td className="text-ink-muted">
                     {new Date(exec.created_at).toLocaleString()}
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </TableFrame>
       )}
     </div>
   )

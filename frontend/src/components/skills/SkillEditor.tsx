@@ -98,12 +98,12 @@ export default function SkillEditor({ content, menu, onChange }: Props) {
         }}
         onKeyDown={onKeyDown}
         onBlur={() => setActive(null)}
-        className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-3 py-2 text-sm font-mono text-ink-800 dark:text-cream-100 resize-y"
+        className="w-full rounded-lg border border-line dark:border-line bg-surface-muted px-3 py-2 text-sm font-mono text-ink resize-y"
       />
 
       {active && options.length > 0 && (
-        <div className="absolute z-10 mt-1 w-[280px] rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 shadow-lg overflow-hidden">
-          <div className="px-2 py-1 text-[9px] uppercase tracking-wider text-ink-400 bg-cream-100 dark:bg-ink-700/60">
+        <div className="absolute z-10 mt-1 w-[280px] rounded-lg border border-line dark:border-line bg-surface dark:bg-surface shadow-lg overflow-hidden">
+          <div className="px-2 py-1 text-[9px] uppercase tracking-wider text-ink-muted bg-surface-muted">
             {active.kind === 'skill' ? 'Skills' : 'Tools'}
           </div>
           <ul className="max-h-52 overflow-y-auto">
@@ -116,14 +116,14 @@ export default function SkillEditor({ content, menu, onChange }: Props) {
                     insert(entry.name)
                   }}
                   className={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs font-body ${
-                    index === highlighted ? 'bg-cream-100 dark:bg-ink-700/60' : ''
+                    index === highlighted ? 'bg-surface-muted' : ''
                   }`}
                 >
-                  <span className="font-mono text-ink-800 dark:text-cream-100">
+                  <span className="font-mono text-ink">
                     {active.kind === 'skill' ? '@' : '/'}
                     {entry.name}
                   </span>
-                  <span className="max-w-[150px] truncate text-[10px] text-ink-400">
+                  <span className="max-w-[150px] truncate text-[10px] text-ink-muted">
                     {entry.description}
                   </span>
                 </button>
@@ -134,7 +134,7 @@ export default function SkillEditor({ content, menu, onChange }: Props) {
       )}
 
       {active && options.length === 0 && (
-        <p className="mt-1 text-[11px] font-body text-ink-400">
+        <p className="mt-1 text-[11px] font-body text-ink-muted">
           {active.kind === 'skill'
             ? 'No skill matches that name yet.'
             : 'No tool matches that name. Tool names come from the Tools section.'}

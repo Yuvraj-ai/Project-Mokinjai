@@ -1,3 +1,10 @@
+/**
+ * DEAD CODE — marked for removal, do not extend (ADR-017: no deletions during
+ * simplification). Nothing imports this file. Its snake_case shapes
+ * (`system_prompt`, `max_tokens`) never matched what the canvas actually stores
+ * (`systemPrompt`, `maxTokens` — see Canvas.tsx `defaultDataForType`). The live
+ * node data shapes are defined inline by Canvas.tsx and PropertiesPanel.tsx.
+ */
 import type { Node } from '@xyflow/react'
 
 export interface AgentNodeData {

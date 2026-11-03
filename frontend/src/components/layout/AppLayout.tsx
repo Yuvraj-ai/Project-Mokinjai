@@ -7,11 +7,11 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="h-screen flex flex-col bg-ink-50/30 dark:bg-ink-900">
+    <div className="h-screen flex flex-col bg-canvas">
       <Navbar sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} />
-        <main className="flex-1 overflow-auto bg-cream-50 dark:bg-ink-900">
+        <main className="flex-1 overflow-auto bg-canvas">
           <Outlet />
         </main>
       </div>

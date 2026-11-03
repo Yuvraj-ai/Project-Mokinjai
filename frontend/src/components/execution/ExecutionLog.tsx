@@ -27,8 +27,8 @@ const statusConfig: Record<string, { icon: React.ReactNode; bg: string }> = {
     bg: 'bg-status-info/10',
   },
   skipped: {
-    icon: <Clock className="w-3.5 h-3.5 text-ink-300" />,
-    bg: 'bg-cream-100',
+    icon: <Clock className="w-3.5 h-3.5 text-ink-muted" />,
+    bg: 'bg-surface-muted',
   },
 }
 
@@ -39,20 +39,20 @@ export default function ExecutionLog({ trace }: ExecutionLogProps) {
 
   return (
     <div className="p-4">
-      <h4 className="font-body text-[11px] font-semibold uppercase tracking-widest text-ink-400 mb-3">Execution Log</h4>
+      <h4 className="font-body text-[11px] font-semibold uppercase tracking-widest text-ink-subtle mb-3">Execution Log</h4>
       <div className="space-y-1.5">
         {nodes.map((node, i) => {
           const config = statusConfig[node.status] || statusConfig.skipped
           return (
             <div
               key={`${node.node_id}-${i}`}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-cream-200 bg-cream-100 text-xs animate-fade-in stagger-${Math.min(i + 1, 8)}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-surface-muted text-xs animate-fade-in stagger-${Math.min(i + 1, 8)}`}
             >
               {config.icon}
-              <span className="font-medium text-ink-500 text-[11px]">{node.node_type}</span>
-              <span className="text-ink-200 font-mono text-[10px] truncate flex-1">{node.node_id}</span>
+              <span className="font-medium text-ink-muted text-[11px]">{node.node_type}</span>
+              <span className="text-ink-subtle font-mono text-[10px] truncate flex-1">{node.node_id}</span>
               {node.duration_ms != null && (
-                <span className="text-ink-300 font-mono text-[10px]">{node.duration_ms}ms</span>
+                <span className="text-ink-muted font-mono text-[10px]">{node.duration_ms}ms</span>
               )}
               {node.error && (
                 <span className="text-status-error font-mono text-[10px] truncate max-w-[100px]" title={node.error}>

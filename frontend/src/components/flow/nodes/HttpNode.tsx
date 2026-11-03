@@ -12,13 +12,13 @@ const HttpNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   return (
     <BaseNode id={id} label={data.label as string || 'HTTP Request'} color={HTTP_COLOR} selected={selected}>
       <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-ink-50/50 dark:bg-ink-700/50 text-ink-600 dark:text-cream-200">
+        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-surface-muted text-ink">
           {method}
         </span>
         {url ? (
-          <span className="font-mono text-[10px] text-ink-400 dark:text-ink-300 truncate">{truncatedUrl}</span>
+          <span className="font-mono text-[10px] text-ink-muted truncate">{truncatedUrl}</span>
         ) : (
-          <span className="font-body text-[10px] text-ink-300 dark:text-ink-400 italic">No URL set</span>
+          <span className="font-body text-[10px] text-ink-muted italic">No URL set</span>
         )}
       </div>
     </BaseNode>

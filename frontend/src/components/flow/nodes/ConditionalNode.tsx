@@ -13,7 +13,7 @@ const ConditionalNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       <BaseNode id={id} label={data.label as string || 'Conditional'} color={CONDITIONAL_COLOR} selected={selected}>
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
-            <span className="font-body text-[9px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-widest">Type</span>
+            <span className="font-body text-[9px] font-semibold text-ink-muted uppercase tracking-widest">Type</span>
             <span
               className="font-body text-[11px] font-semibold px-1.5 py-0.5 rounded"
               style={{ backgroundColor: `${CONDITIONAL_COLOR}15`, color: CONDITIONAL_COLOR }}
@@ -23,8 +23,8 @@ const ConditionalNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </div>
           {conditionValue && (
             <div className="flex items-center gap-1.5">
-              <span className="font-body text-[9px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-widest">Value</span>
-              <span className="font-body text-[11px] text-ink-500 dark:text-cream-200 truncate max-w-[140px]">
+              <span className="font-body text-[9px] font-semibold text-ink-muted uppercase tracking-widest">Value</span>
+              <span className="font-body text-[11px] text-ink truncate max-w-[140px]">
                 {conditionValue}
               </span>
             </div>

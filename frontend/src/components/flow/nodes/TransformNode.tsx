@@ -15,14 +15,14 @@ const TransformNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     split: 'Split',
     join: 'Join',
     extract_field: 'Extract Field',
-    parse_json: 'Parse JSON',
-    stringify: 'Stringify',
+    json_parse: 'Parse JSON',
+    json_stringify: 'Stringify',
   };
 
   return (
     <BaseNode id={id} label={data.label as string || 'Transform'} color={TRANSFORM_COLOR} selected={selected}>
       <div className="flex items-center gap-1.5">
-        <span className="font-body text-[9px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider">Type</span>
+        <span className="font-body text-[9px] font-semibold text-ink-muted uppercase tracking-wider">Type</span>
         <span
           className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded"
           style={{ backgroundColor: `${TRANSFORM_COLOR}15`, color: TRANSFORM_COLOR }}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bot, Loader2, Send, Square, User } from 'lucide-react'
 import { streamAgentChat, type ChatMessage } from '../../api/agents'
+import Button from '../ui/Button'
+import { cn } from '../../lib/utils'
 
 interface AgentChatPanelProps {
   workspaceId: string
@@ -90,25 +92,19 @@ export default function AgentChatPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-ink-100/60 dark:border-ink-700/60 px-4 py-2.5">
+      <header className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="min-w-0">
-          <h2 className="truncate font-display text-lg text-ink-800 dark:text-cream-100">
-            {agentName}
-          </h2>
-          <p className="text-[10px] text-ink-400">Chat test — each turn is recorded as a run.</p>
+          <h2 className="truncate text-[15px] font-semibold text-ink">{agentName}</h2>
+          <p className="text-xs text-ink-subtle">Chat test — each turn is recorded as a run.</p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg px-2 py-1 text-xs text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-700"
-        >
+        <Button variant="ghost" size="sm" onClick={onClose}>
           Close
-        </button>
+        </Button>
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
-          <p className="text-xs text-ink-400">Send a message to try this agent.</p>
+          <p className="text-[13px] text-ink-subtle">Send a message to try this agent.</p>
         )}
         {messages.map((message, index) => (
           <div
@@ -116,35 +112,35 @@ export default function AgentChatPanel({
             className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             {message.role === 'assistant' && (
-              <Bot className="mt-1 h-3.5 w-3.5 shrink-0 text-ink-300" />
+              <Bot className="mt-1 h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />
             )}
-            <p
-              className={`max-w-[80%] whitespace-pre-wrap rounded-xl px-3 py-2 text-xs ${
-                message.role === 'user'
-                  ? 'bg-accent-warm/10 text-ink-800 dark:text-cream-100'
-                  : 'bg-cream-100 dark:bg-ink-700/60 text-ink-700 dark:text-cream-100'
-              }`}
-            >
-              {message.content || (busy ? '…' : '')}
-            </p>
-            {message.role === 'user' && <User className="mt-1 h-3.5 w-3.5 shrink-0 text-ink-300" />}
+            {message.role === 'user' ? (
+              <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-surface-muted px-3.5 py-2 text-[13px] text-ink">
+                {message.content || (busy ? '…' : '')}
+              </p>
+            ) : (
+              <p className="max-w-[80%] whitespace-pre-wrap px-1 py-1 text-[13px] text-ink">
+                {message.content || (busy ? '…' : '')}
+              </p>
+            )}
+            {message.role === 'user' && <User className="mt-1 h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />}
           </div>
         ))}
         {activity && (
-          <p className="flex items-center gap-2 text-[10px] text-ink-400">
+          <p className="flex items-center gap-2 text-xs text-ink-subtle">
             <Loader2 className="h-3 w-3 animate-spin" /> {activity}
           </p>
         )}
         {error && (
-          <p className="rounded-lg border border-status-error/40 px-3 py-2 text-[11px] text-status-error">
+          <p className="rounded-lg bg-status-error-soft px-3 py-2 text-[13px] text-status-error">
             {error}
           </p>
         )}
-        {summary && <p className="text-[10px] text-ink-400">{summary}</p>}
+        {summary && <p className="font-mono text-[11px] text-ink-subtle">{summary}</p>}
         <div ref={bottomRef} />
       </div>
 
-      <footer className="border-t border-ink-100/60 dark:border-ink-700/60 p-3">
+      <footer className="border-t border-line p-3">
         <div className="flex items-end gap-2">
           <textarea
             value={input}
@@ -157,25 +153,16 @@ export default function AgentChatPanel({
               }
             }}
             placeholder="Ask the agent something…"
-            className="flex-1 resize-none rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+            className="flex-1 resize-none rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring"
           />
           {busy ? (
-            <button
-              type="button"
-              onClick={() => abortRef.current?.abort()}
-              className="flex items-center gap-1 rounded-lg border border-ink-100 dark:border-ink-600 px-3 py-2 text-xs text-ink-600 dark:text-cream-100"
-            >
-              <Square className="h-3 w-3" /> Stop
-            </button>
+            <Button variant="secondary" size="sm" onClick={() => abortRef.current?.abort()}>
+              <Square className="h-3 w-3" aria-hidden /> Stop
+            </Button>
           ) : (
-            <button
-              type="button"
-              disabled={!input.trim()}
-              onClick={() => void send()}
-              className="flex items-center gap-1 rounded-lg bg-accent-warm px-3 py-2 text-xs text-white disabled:opacity-50"
-            >
-              <Send className="h-3 w-3" /> Send
-            </button>
+            <Button size="sm" disabled={!input.trim()} onClick={() => void send()}>
+              <Send className="h-3 w-3" aria-hidden /> Send
+            </Button>
           )}
         </div>
       </footer>

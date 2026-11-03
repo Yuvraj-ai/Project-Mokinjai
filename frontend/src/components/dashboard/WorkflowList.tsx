@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { listWorkflows } from '../../api/workflows'
 import WorkflowCard from './WorkflowCard'
-import { Loader2, Inbox } from 'lucide-react'
+import { Spinner, EmptyState } from '../ui/Feedback'
+import Button from '../ui/Button'
+import { Inbox } from 'lucide-react'
 
 interface Workflow {
   id: string
@@ -49,8 +51,8 @@ export default function WorkflowList({ workspaceId }: WorkflowListProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="w-5 h-5 text-accent animate-spin" />
-        <span className="ml-3 text-sm text-ink-300 font-body">Loading workflows...</span>
+        <Spinner />
+        <span className="ml-3 text-sm text-ink-muted">Loading workflows...</span>
       </div>
     )
   }
@@ -58,31 +60,28 @@ export default function WorkflowList({ workspaceId }: WorkflowListProps) {
   if (error) {
     return (
       <div className="text-center py-24">
-        <p className="text-status-error text-sm font-body">{error}</p>
-        <button
-          onClick={fetchWorkflows}
-          className="mt-3 text-sm text-accent hover:text-accent-warm font-body font-medium transition-colors duration-300"
-        >
+        <p className="text-status-error text-sm">{error}</p>
+        <Button variant="secondary" size="sm" className="mt-3" onClick={fetchWorkflows}>
           Try again
-        </button>
+        </Button>
       </div>
     )
   }
 
   if (workflows.length === 0) {
     return (
-      <div className="text-center py-24 animate-fade-in">
-        <Inbox className="w-10 h-10 text-cream-300 mx-auto mb-5" strokeWidth={1.5} />
-        <h3 className="text-2xl font-display italic text-ink-900 dark:text-cream-100 mb-2">No workflows yet</h3>
-        <p className="text-sm text-ink-400 dark:text-ink-300 font-body">
-          Create your first workflow to get started.
-        </p>
+      <div className="animate-fade-in">
+        <EmptyState
+          icon={Inbox}
+          title="No workflows yet"
+          description="Create your first workflow to get started."
+        />
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-od-id="workflows-grid">
       {workflows.map((workflow, index) => (
         <div
           key={workflow.id}

@@ -144,16 +144,16 @@ const Canvas: React.FC = () => {
         snapToGrid
         snapGrid={[16, 16]}
         deleteKeyCode={['Backspace', 'Delete']}
-        className="bg-cream-50 dark:bg-ink-900"
+        className="bg-canvas"
       >
         <Controls
           position="bottom-left"
           showInteractive={false}
-          className="!shadow-sm !border !border-ink-200/40 !rounded-lg !bg-white/90 dark:!bg-ink-800/90 !backdrop-blur-sm [&>button]:!bg-transparent [&>button]:!border-b [&>button]:!border-ink-200/30 dark:[&>button]:!border-ink-700/50 [&>button]:!text-ink-500 dark:[&>button]:!text-ink-300 [&>button:hover]:!bg-ink-100/50 dark:[&>button:hover]:!bg-ink-700/50 [&>button]:!w-8 [&>button]:!h-8 [&>button]:!flex [&>button]:!items-center [&>button]:!justify-center [&>button:last-child]:!border-b-0"
+          className="!shadow-sm !border !border-line !rounded-lg !bg-surface !backdrop-blur-sm [&>button]:!bg-transparent [&>button]:!border-b [&>button]:!border-line [&>button]:!text-ink-muted [&>button:hover]:!bg-surface-muted [&>button:last-child]:!border-b-0"
         />
         <MiniMap
           position="bottom-right"
-          className="!shadow-sm !border !border-ink-200/40 !rounded-lg !bg-white/90 dark:!bg-ink-800/90 !backdrop-blur-sm"
+          className="!shadow-sm !border !border-line !rounded-lg !bg-surface !backdrop-blur-sm"
           maskColor="rgba(15, 15, 20, 0.15)"
           nodeColor={(node) => {
             const colorMap: Record<string, string> = {

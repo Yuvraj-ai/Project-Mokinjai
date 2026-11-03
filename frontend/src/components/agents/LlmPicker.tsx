@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
 import type { AgentOption } from '../../api/agents'
+import { cn } from '../../lib/utils'
 
 interface LlmPickerProps {
   options: AgentOption[]
@@ -45,26 +46,26 @@ export default function LlmPicker({ options, value, onChange }: LlmPickerProps) 
       <button
         type="button"
         onClick={() => pick(option)}
-        className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left ${
-          option.id === value
-            ? 'bg-ink-800/5 dark:bg-ink-600/50'
-            : 'hover:bg-ink-50 dark:hover:bg-ink-700'
-        }`}
+        className={cn(
+          'flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors duration-150',
+          option.id === value ? 'bg-surface-muted' : 'hover:bg-surface-muted',
+        )}
       >
         <span className="min-w-0">
-          <span className="block truncate text-xs text-ink-700 dark:text-cream-100">
+          <span className="block truncate text-[13px] text-ink">
             {option.name}
           </span>
-          <span className="block truncate font-mono text-[10px] text-ink-400">
+          <span className="block truncate font-mono text-[11px] text-ink-subtle">
             {option.provider}/{option.model_id}
           </span>
         </span>
         <span
-          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${
+          className={cn(
+            'shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide',
             option.status === 'verified'
-              ? 'bg-status-success/10 text-status-success'
-              : 'bg-status-warning/10 text-status-warning'
-          }`}
+              ? 'bg-status-success-soft text-status-success'
+              : 'bg-status-warning-soft text-status-warning',
+          )}
         >
           {option.status ?? 'ready'}
         </span>
@@ -74,47 +75,47 @@ export default function LlmPicker({ options, value, onChange }: LlmPickerProps) 
 
   return (
     <div className="relative">
-      <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
+      <span className="mb-1.5 block text-[13px] font-medium text-ink">
         LLM
       </span>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left transition-colors duration-150 hover:border-line-strong focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        <span className={`truncate text-xs ${selected ? 'text-ink-800 dark:text-cream-100' : 'text-ink-300'}`}>
+        <span className={cn('truncate text-sm', selected ? 'text-ink' : 'text-ink-subtle')}>
           {selected ? labelFor(selected) : 'Choose a verified model'}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-300" />
+        <ChevronDown className="h-4 w-4 shrink-0 text-ink-subtle" />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-30 mt-1 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 p-1.5 shadow-lg">
-          <div className="mb-1 flex items-center gap-2 rounded-md border border-ink-100 dark:border-ink-600 px-2 py-1">
-            <Search className="h-3 w-3 text-ink-300" />
+        <div className="absolute left-0 right-0 z-30 mt-1.5 rounded-xl border border-line bg-surface-raised p-1.5 shadow-menu">
+          <div className="mb-1 flex items-center gap-2 rounded-md border border-line px-2 py-1.5">
+            <Search className="h-3.5 w-3.5 text-ink-subtle" />
             <input
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search models…"
-              className="w-full bg-transparent text-xs text-ink-700 dark:text-cream-100 placeholder:text-ink-300"
+              className="w-full bg-transparent text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none"
             />
           </div>
           <ul className="max-h-64 overflow-y-auto">
             {suggested.length > 0 && (
-              <li className="px-2 pt-1 text-[9px] uppercase tracking-wider text-ink-300">
+              <li className="px-2 pt-1.5 font-mono text-[10px] uppercase tracking-wider text-ink-subtle">
                 Suggested
               </li>
             )}
             {suggested.map(row)}
             {rest.length > 0 && (
-              <li className="px-2 pt-1 text-[9px] uppercase tracking-wider text-ink-300">
+              <li className="px-2 pt-1.5 font-mono text-[10px] uppercase tracking-wider text-ink-subtle">
                 All
               </li>
             )}
             {rest.map(row)}
             {matches.length === 0 && (
-              <li className="px-2 py-2 text-[11px] text-ink-400">
+              <li className="px-2 py-2 text-xs text-ink-subtle">
                 No verified model matches that search.
               </li>
             )}

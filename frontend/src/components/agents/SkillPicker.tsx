@@ -1,6 +1,7 @@
 import { Lock } from 'lucide-react'
 import type { AgentOption } from '../../api/agents'
 import MultiSelect from './MultiSelect'
+import { cn } from '../../lib/utils'
 
 export interface SkillClosure {
   skills: { id: string; name: string; root: boolean }[]
@@ -77,7 +78,7 @@ export default function SkillPicker({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <MultiSelect
         label="Skills"
         options={skills}
@@ -89,17 +90,17 @@ export default function SkillPicker({
 
       {closure.skills.length > 0 && (
         <div>
-          <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
+          <span className="mb-1.5 block text-[13px] font-medium text-ink">
             Resolved skills
           </span>
           <div className="flex flex-wrap gap-1.5">
             {closure.skills.map((skill) => (
               <span
                 key={skill.id || skill.name}
-                className="rounded-full bg-cream-100 dark:bg-ink-700 px-2 py-0.5 font-mono text-[10px] text-ink-600 dark:text-ink-200"
+                className="inline-flex items-center rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-ink-muted"
               >
                 @{skill.name}
-                {!skill.root && <span className="ml-1 text-ink-300">nested</span>}
+                {!skill.root && <span className="ml-1 normal-case text-ink-subtle">nested</span>}
               </span>
             ))}
           </div>
@@ -107,26 +108,27 @@ export default function SkillPicker({
       )}
 
       <div>
-        <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
+        <span className="mb-1.5 block text-[13px] font-medium text-ink">
           Tools the model can call
         </span>
         <div className="mb-2 flex flex-wrap gap-1.5">
           {[...effective.values()].map((tool) => (
             <span
               key={tool.name}
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide',
                 tool.locked
-                  ? 'bg-ink-800/5 dark:bg-ink-600/50 text-ink-500 dark:text-ink-200'
-                  : 'bg-cream-100 dark:bg-ink-700 text-ink-600 dark:text-ink-200'
-              }`}
+                  ? 'border-line-strong bg-surface-muted text-ink'
+                  : 'border-line bg-surface text-ink-muted',
+              )}
               title={tool.locked ? 'Required by a selected skill' : `From the ${tool.source} tool set`}
             >
-              {tool.locked && <Lock className="h-2.5 w-2.5" />}
-              <span className="font-mono">{tool.name}</span>
+              {tool.locked && <Lock className="h-2.5 w-2.5" aria-hidden />}
+              <span>{tool.name}</span>
             </span>
           ))}
           {effective.size === 0 && (
-            <span className="text-[11px] text-ink-400">No tools resolved yet.</span>
+            <span className="text-xs text-ink-subtle">No tools resolved yet.</span>
           )}
         </div>
         <MultiSelect

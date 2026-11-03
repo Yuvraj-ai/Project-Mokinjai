@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Check, Search } from 'lucide-react'
 import type { AgentOption } from '../../api/agents'
+import { Checkbox } from '../ui/Controls'
+import { cn } from '../../lib/utils'
 
 interface MultiSelectProps {
   label: string
@@ -39,21 +41,19 @@ export default function MultiSelect({
 
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-          {label}
-        </span>
-        <span className="text-[10px] text-ink-400">{values.length} selected</span>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-[13px] font-medium text-ink">{label}</span>
+        <span className="font-mono text-xs text-ink-subtle">{values.length} selected</span>
       </div>
 
-      <div className="rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50">
-        <div className="flex items-center gap-2 border-b border-ink-100/70 dark:border-ink-600/70 px-2 py-1.5">
-          <Search className="h-3 w-3 text-ink-300" />
+      <div className="rounded-lg border border-line bg-surface">
+        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <Search className="h-3.5 w-3.5 text-ink-subtle" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={`Search ${label.toLowerCase()}…`}
-            className="w-full bg-transparent text-xs text-ink-700 dark:text-cream-100 placeholder:text-ink-300"
+            className="w-full bg-transparent text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none"
           />
         </div>
 
@@ -67,29 +67,20 @@ export default function MultiSelect({
                   type="button"
                   disabled={blocked}
                   onClick={() => toggle(option.id)}
-                  className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left ${
-                    blocked
-                      ? 'opacity-40'
-                      : selected
-                        ? 'bg-ink-800/5 dark:bg-ink-600/50'
-                        : 'hover:bg-ink-50 dark:hover:bg-ink-700'
-                  }`}
+                  className={cn(
+                    'flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors duration-150',
+                    blocked ? 'opacity-40' : selected ? 'bg-surface-muted' : 'hover:bg-surface-muted',
+                  )}
                 >
-                  <span
-                    className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
-                      selected
-                        ? 'border-accent-warm bg-accent-warm text-white'
-                        : 'border-ink-200 dark:border-ink-500'
-                    }`}
-                  >
-                    {selected && <Check className="h-2.5 w-2.5" />}
+                  <span className="mt-0.5 shrink-0">
+                    <Checkbox checked={selected} onChange={() => toggle(option.id)} disabled={blocked} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs text-ink-700 dark:text-cream-100">
+                    <span className="block truncate text-[13px] text-ink">
                       {option.name}
                     </span>
                     {(option.description || hint?.(option)) && (
-                      <span className="block truncate text-[10px] text-ink-400">
+                      <span className="block truncate text-xs text-ink-subtle">
                         {hint?.(option) ?? option.description}
                       </span>
                     )}
@@ -99,12 +90,12 @@ export default function MultiSelect({
             )
           })}
           {matches.length === 0 && (
-            <li className="px-2 py-2 text-[11px] text-ink-400">{emptyText}</li>
+            <li className="px-2 py-2 text-xs text-ink-subtle">{emptyText}</li>
           )}
         </ul>
       </div>
 
-      {error && <p className="mt-1 text-[11px] text-status-error">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-status-error">{error}</p>}
     </div>
   )
 }

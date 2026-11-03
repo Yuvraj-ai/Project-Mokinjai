@@ -72,7 +72,7 @@ const CustomEdge: React.FC<EdgeProps> = ({
         >
           {hovered && (
             <button
-              className="flex items-center justify-center w-5 h-5 rounded-full text-cream-50 shadow-md transition-all"
+              className="flex items-center justify-center w-5 h-5 rounded-full text-white shadow-md transition-all"
               style={{ backgroundColor: '#DC2626' }}
               onClick={handleDelete}
               title="Delete edge"

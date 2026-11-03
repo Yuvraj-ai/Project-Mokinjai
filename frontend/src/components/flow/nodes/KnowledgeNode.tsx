@@ -13,17 +13,17 @@ const KnowledgeNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     <BaseNode id={id} label={data.label as string || 'Knowledge Base'} color={KNOWLEDGE_COLOR} selected={selected}>
       <div className="space-y-1">
         <div className="flex items-center gap-1.5">
-          <BookOpen className="w-3 h-3 text-ink-300 dark:text-ink-400" />
+          <BookOpen className="w-3 h-3 text-ink-muted" />
           {kbName ? (
-            <span className="font-body text-[10px] font-medium text-ink-500 dark:text-cream-200 truncate max-w-[140px]">
+            <span className="font-body text-[10px] font-medium text-ink truncate max-w-[140px]">
               {kbName}
             </span>
           ) : (
-            <span className="font-body text-[10px] text-ink-300 dark:text-ink-400 italic">No KB selected</span>
+            <span className="font-body text-[10px] text-ink-muted italic">No KB selected</span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="font-body text-[9px] font-semibold text-ink-300 dark:text-ink-400 uppercase tracking-wider">Top K</span>
+          <span className="font-body text-[9px] font-semibold text-ink-muted uppercase tracking-wider">Top K</span>
           <span
             className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded"
             style={{ backgroundColor: `${KNOWLEDGE_COLOR}15`, color: KNOWLEDGE_COLOR }}

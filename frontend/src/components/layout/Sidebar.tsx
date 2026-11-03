@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { GitBranch, Play, FileText, Bot, Braces, FolderOpen, Database, BookOpen, Wrench, Plug, Cpu } from 'lucide-react'
+import { cn } from '../../lib/utils'
 
 const navItems = [
   { to: '/agents', label: 'Agents', icon: Bot },
@@ -16,6 +17,11 @@ const navItems = [
   { to: '/connectors', label: 'Connectors', icon: Plug },
 ]
 
+const navSections = [
+  { label: 'Build', items: navItems.slice(0, 5) },
+  { label: 'Data & tools', items: navItems.slice(5) },
+]
+
 interface SidebarProps {
   open: boolean
 }
@@ -23,7 +29,6 @@ interface SidebarProps {
 export default function Sidebar({ open }: SidebarProps) {
   const [hoverExpanded, setHoverExpanded] = useState(false)
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const location = useLocation()
 
   const handleMouseEnter = useCallback(() => {
     if (collapseTimer.current) {
@@ -45,45 +50,58 @@ export default function Sidebar({ open }: SidebarProps) {
     <>
       {open && (
         <div
-          className="fixed inset-0 bg-ink-900/20 z-20 md:hidden"
-          style={{ top: '3.5rem' }}
+          className="fixed inset-0 bg-black/20 z-20 md:hidden"
+          style={{ top: '3rem' }}
+          data-od-id="sidebar-overlay"
         />
       )}
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`
-          ${open ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0
-          fixed md:static top-14 left-0 z-20
-          ${isExpanded ? 'w-56' : 'w-16'}
-          bg-white dark:bg-ink-800
-          border-r border-ink-100/60 dark:border-ink-700/60
-          flex flex-col shrink-0
-          transition-all duration-200 ease-out
-          h-[calc(100vh-3.5rem)]
-        `}
+        className={cn(
+          open ? 'translate-x-0' : '-translate-x-full',
+          'md:translate-x-0',
+          'fixed md:static top-12 left-0 z-20',
+          isExpanded ? 'w-56' : 'w-14',
+          'bg-surface border-r border-line',
+          'flex flex-col shrink-0',
+          'transition-all duration-200 ease-out',
+          'h-[calc(100vh-3rem)]',
+        )}
+        data-od-id="sidebar"
       >
-        <nav className="flex-1 px-2 py-3">
+        <nav className="flex-1 px-2 py-4">
           <div className="space-y-1">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg text-sm font-body font-medium transition-all duration-150 ${
-                    isExpanded ? 'px-4 py-3' : 'justify-center px-2 py-3'
-                  } ${
-                    isActive
-                      ? 'bg-ink-800/5 dark:bg-ink-600/50 text-ink-900 dark:text-cream-100'
-                      : 'text-ink-400 dark:text-ink-300 hover:bg-ink-50 dark:hover:bg-ink-700 hover:text-ink-700 dark:hover:text-cream-200'
-                  }`
-                }
-                title={!isExpanded ? item.label : undefined}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {isExpanded && <span>{item.label}</span>}
-              </NavLink>
+            {navSections.map((section) => (
+              <div key={section.label} className="mb-4">
+                {isExpanded && (
+                  <p className="text-[11px] font-medium text-ink-subtle px-3 pb-1.5">
+                    {section.label}
+                  </p>
+                )}
+                <div className="space-y-0.5">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center rounded-lg text-sm transition-colors duration-150',
+                          isExpanded ? 'gap-2.5 px-3 py-2' : 'justify-center px-2 py-2.5',
+                          isActive
+                            ? 'bg-surface-muted text-ink font-medium'
+                            : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
+                        )
+                      }
+                      title={!isExpanded ? item.label : undefined}
+                      data-od-id={`nav-${item.to.replace('/', '').toLowerCase()}`}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" aria-hidden />
+                      {isExpanded && <span>{item.label}</span>}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </nav>

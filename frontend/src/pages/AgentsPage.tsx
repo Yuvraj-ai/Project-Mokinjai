@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bot, Loader2, MessageSquare, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Bot, MessageSquare, Plus, Settings2, Trash2 } from 'lucide-react'
 import { listWorkspaces } from '../api/workspaces'
 import {
   deleteAgent,
@@ -14,6 +14,8 @@ import {
 import AgentChatPanel from '../components/agents/AgentChatPanel'
 import AgentConfigDialog from '../components/agents/AgentConfigDialog'
 import AgentCreateDialog from '../components/agents/AgentCreateDialog'
+import Button from '../components/ui/Button'
+import { Spinner } from '../components/ui/Feedback'
 
 interface Draft {
   agent: Agent | null
@@ -116,53 +118,48 @@ export default function AgentsPage() {
 
   if (loading || !workspaceId) {
     return (
-      <div className="flex h-full items-center justify-center text-ink-400">
-        <Loader2 className="h-5 w-5 animate-spin" />
+      <div className="flex h-full items-center justify-center">
+        <Spinner />
       </div>
     )
   }
 
   return (
     <div className="flex h-full">
-      <aside className="w-80 shrink-0 overflow-y-auto border-r border-ink-100/60 dark:border-ink-700/60 p-4">
+      <aside className="w-80 shrink-0 overflow-y-auto border-r border-line bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-sm font-semibold text-ink-800 dark:text-cream-100">
+          <h1 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Bot className="h-4 w-4" /> Agents
           </h1>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void openNew()}
-            className="flex items-center gap-1 rounded-lg bg-accent-warm px-2 py-1 text-xs text-white disabled:opacity-50"
-          >
-            <Plus className="h-3 w-3" /> New
-          </button>
+          <Button size="sm" disabled={busy} onClick={() => void openNew()}>
+            <Plus className="h-3.5 w-3.5" /> New
+          </Button>
         </div>
 
         {banner && (
-          <p className="mb-3 rounded-lg bg-cream-100 dark:bg-ink-700/60 px-2 py-1.5 text-[11px] text-ink-600 dark:text-ink-200">
+          <p className="mb-3 rounded-lg bg-surface-muted px-2.5 py-1.5 text-xs text-ink-muted">
             {banner}
           </p>
         )}
         {error && (
-          <p className="mb-3 rounded-lg border border-status-error/40 px-2 py-1.5 text-[11px] text-status-error">
+          <p className="mb-3 rounded-lg bg-status-error-soft px-2.5 py-1.5 text-xs text-status-error">
             {error}
           </p>
         )}
 
         {groups.map(([letter, items]) => (
           <div key={letter} className="mb-3">
-            <p className="mb-1 px-1 text-[10px] uppercase tracking-wider font-semibold text-ink-300">
+            <p className="mb-1 px-1 font-mono text-[10px] uppercase tracking-wider text-ink-subtle">
               {letter}
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {items.map((item) => (
                 <li
                   key={item.id}
-                  className={`group rounded-lg px-2 py-1.5 ${
+                  className={`group rounded-lg px-2 py-1.5 transition-colors duration-150 ${
                     chatAgent?.id === item.id
-                      ? 'bg-ink-800/5 dark:bg-ink-600/50'
-                      : 'hover:bg-ink-50 dark:hover:bg-ink-700'
+                      ? 'bg-surface-muted'
+                      : 'hover:bg-surface-muted'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -172,7 +169,7 @@ export default function AgentsPage() {
                       className="min-w-0 flex-1 text-left"
                     >
                       <span className="flex items-center gap-1.5">
-                        <span className="truncate text-xs font-medium text-ink-700 dark:text-cream-100">
+                        <span className="truncate text-xs font-medium text-ink">
                           {item.name}
                         </span>
                         <span
@@ -183,17 +180,17 @@ export default function AgentsPage() {
                         />
                       </span>
                       {item.description && (
-                        <span className="mt-0.5 block truncate text-[10px] text-ink-400">
+                        <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
                           {item.description}
                         </span>
                       )}
                     </button>
-                    <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100">
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                       <button
                         type="button"
                         title="Configure"
                         onClick={() => void openExisting(item)}
-                        className="text-ink-300 hover:text-ink-600"
+                        className="rounded p-1 text-ink-subtle hover:bg-surface-muted hover:text-ink"
                       >
                         <Settings2 className="h-3.5 w-3.5" />
                       </button>
@@ -201,7 +198,7 @@ export default function AgentsPage() {
                         type="button"
                         title="Chat"
                         onClick={() => setChatAgent(item)}
-                        className="text-ink-300 hover:text-ink-600"
+                        className="rounded p-1 text-ink-subtle hover:bg-surface-muted hover:text-ink"
                       >
                         <MessageSquare className="h-3.5 w-3.5" />
                       </button>
@@ -209,7 +206,7 @@ export default function AgentsPage() {
                         type="button"
                         title="Delete"
                         onClick={() => void remove(item)}
-                        className="text-ink-300 hover:text-status-error"
+                        className="rounded p-1 text-ink-subtle hover:bg-status-error-soft hover:text-status-error"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -222,7 +219,7 @@ export default function AgentsPage() {
         ))}
 
         {agents.length === 0 && (
-          <p className="px-1 text-[11px] text-ink-400">
+          <p className="px-1 text-xs text-ink-subtle">
             No agents yet. Create one to give a model a prompt, skills and tools.
           </p>
         )}
@@ -237,7 +234,7 @@ export default function AgentsPage() {
             onClose={() => setChatAgent(null)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center px-6 text-center text-xs text-ink-400">
+          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-ink-subtle">
             Open an agent to configure it, or press the chat icon to test it.
           </div>
         )}

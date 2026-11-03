@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Loader2, FileText } from 'lucide-react'
+import { Plus, FileText } from 'lucide-react'
 import { listPrompts, type PromptTemplate } from '../../../api/prompts'
 import PromptCard from './PromptCard'
 import PromptEditor from './PromptEditor'
+import Button from '../../ui/Button'
+import { Spinner, EmptyState } from '../../ui/Feedback'
 
 interface PromptLibraryProps {
   workspaceId: string
@@ -46,7 +48,7 @@ export default function PromptLibrary({ workspaceId, fullPage }: PromptLibraryPr
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-5 h-5 text-accent animate-spin" />
+        <Spinner />
       </div>
     )
   }
@@ -54,26 +56,27 @@ export default function PromptLibrary({ workspaceId, fullPage }: PromptLibraryPr
   if (fullPage) {
     return (
       <div className="max-w-5xl mx-auto px-8 py-10">
-        <div className="flex items-end justify-between mb-8 animate-fade-in-up stagger-1">
+        <div className="flex items-start justify-between mb-8 animate-fade-in-up stagger-1">
           <div>
-            <h1 className="text-3xl font-display text-ink-900 dark:text-cream-100 tracking-tight leading-none">
+            <h1 className="text-2xl font-semibold text-ink tracking-tight leading-tight">
               System Prompts
             </h1>
-            <p className="text-ink-400 dark:text-ink-300 mt-2 text-sm font-body">
+            <p className="mt-1 text-sm text-ink-muted">
               Create and manage reusable prompts for your AI agents
             </p>
           </div>
-          <button onClick={() => { setEditing(null); setShowEditor(true) }}
-            className="inline-flex items-center gap-2 bg-ink-800 dark:bg-cream-200 hover:bg-ink-900 dark:hover:bg-cream-300 text-cream-50 dark:text-ink-800 font-body font-medium py-2 px-5 rounded-lg text-sm transition-all duration-200 hover:shadow-md">
-            <Plus className="w-4 h-4" /> Create Prompt
-          </button>
+          <Button onClick={() => { setEditing(null); setShowEditor(true) }}>
+            <Plus className="w-4 h-4" aria-hidden /> Create Prompt
+          </Button>
         </div>
 
         {prompts.length === 0 ? (
-          <div className="text-center py-20 animate-fade-in">
-            <FileText className="w-10 h-10 text-cream-300 dark:text-ink-600 mx-auto mb-4" strokeWidth={1.5} />
-            <h3 className="text-2xl font-display italic text-ink-900 dark:text-cream-100 mb-2">No prompts yet</h3>
-            <p className="text-sm text-ink-400 dark:text-ink-300 font-body">Create your first system prompt to get started.</p>
+          <div className="bg-surface border border-line rounded-xl animate-fade-in">
+            <EmptyState
+              icon={FileText}
+              title="No prompts yet"
+              description="Create your first system prompt to get started."
+            />
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -98,21 +101,21 @@ export default function PromptLibrary({ workspaceId, fullPage }: PromptLibraryPr
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-ink-100/60 dark:border-ink-700/60">
-        <h2 className="text-xs font-body font-semibold text-ink-700 dark:text-cream-200">System Prompts</h2>
-        <button onClick={() => { setEditing(null); setShowEditor(true) }}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-body font-medium bg-ink-800 dark:bg-cream-200 text-cream-50 dark:text-ink-800 rounded-md hover:bg-ink-900 dark:hover:bg-cream-300 transition-colors">
-          <Plus className="w-3 h-3" /> New Prompt
-        </button>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+        <h2 className="text-sm font-semibold text-ink">System Prompts</h2>
+        <Button size="sm" variant="secondary" onClick={() => { setEditing(null); setShowEditor(true) }}>
+          <Plus className="w-3.5 h-3.5" aria-hidden /> New Prompt
+        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
         {prompts.length === 0 ? (
-          <div className="text-center py-12">
-            <FileText className="w-8 h-8 text-ink-200 dark:text-ink-600 mx-auto mb-3" />
-            <p className="text-xs text-ink-400 dark:text-ink-300 font-body">No prompts yet</p>
-            <p className="text-[10px] text-ink-300 dark:text-ink-400 mt-1">Create your first system prompt</p>
-          </div>
+          <EmptyState
+            icon={FileText}
+            title="No prompts yet"
+            description="Create your first system prompt"
+            className="py-10"
+          />
         ) : (
           <div className="grid grid-cols-1 gap-2">
             {prompts.map((prompt) => (

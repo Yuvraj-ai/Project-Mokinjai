@@ -2,7 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useAuth } from '../../hooks/useAuth'
 import { useThemeStore } from '../../store/themeStore'
-import { LogOut, ChevronDown, Shield, Menu, X, Sun, Moon } from 'lucide-react'
+import { LogOut, ChevronDown, Menu, X, Sun, Moon } from 'lucide-react'
+import Badge from '../ui/Badge'
+import { MenuItem } from '../ui/Menu'
+import { cn } from '../../lib/utils'
 
 interface NavbarProps {
   sidebarOpen: boolean
@@ -36,27 +39,36 @@ export default function Navbar({ sidebarOpen, onToggleSidebar }: NavbarProps) {
     : (user?.email?.[0]?.toUpperCase() ?? 'U')
 
   return (
-    <header className="h-14 bg-white/80 dark:bg-ink-800/80 backdrop-blur-sm border-b border-ink-100/60 dark:border-ink-700/60 flex items-center justify-between px-4 md:px-6 shrink-0 z-30">
+    <header
+      className="h-12 bg-canvas border-b border-line flex items-center justify-between px-4 md:px-5 shrink-0 z-30"
+      data-od-id="navbar"
+    >
       <div className="flex items-center gap-3">
         <button
           onClick={onToggleSidebar}
-          className="md:hidden p-1.5 rounded-lg hover:bg-ink-50 dark:hover:bg-ink-700 text-ink-500 dark:text-ink-300 transition-colors"
+          aria-label="Toggle sidebar"
+          className="md:hidden p-1.5 rounded-lg hover:bg-surface-muted text-ink-muted transition-colors"
+          data-od-id="sidebar-toggle"
         >
           {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
-        <div className="w-8 h-8 bg-ink-800 dark:bg-cream-200 rounded-lg flex items-center justify-center shadow-sm">
-          <span className="text-cream-50 dark:text-ink-800 text-sm font-bold leading-none">◆</span>
+        <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center" data-od-id="app-logo">
+          <svg viewBox="0 0 24 24" className="w-4 h-4 text-primary-fg" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 2L7 8h3v6h4V8h3l-5-6z" />
+          </svg>
         </div>
-        <h1 className="text-base font-display text-ink-800 dark:text-cream-100 tracking-tight">
+        <h1 className="text-sm font-semibold text-ink tracking-tight">
           Project Mokinjay
         </h1>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <button
           onClick={toggle}
-          className="p-2 rounded-lg hover:bg-ink-50 dark:hover:bg-ink-700 text-ink-400 dark:text-ink-300 transition-colors"
+          aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="p-2 rounded-lg hover:bg-surface-muted text-ink-muted transition-colors"
           title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          data-od-id="theme-toggle"
         >
           {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
@@ -64,46 +76,51 @@ export default function Navbar({ sidebarOpen, onToggleSidebar }: NavbarProps) {
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2.5 hover:bg-cream-100 dark:hover:bg-ink-700 rounded-lg px-3 py-2 transition-all duration-200"
+            className={cn(
+              'flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150',
+              'hover:bg-surface-muted',
+            )}
+            data-od-id="user-menu"
           >
-            <div className="w-8 h-8 bg-cream-200 dark:bg-ink-600 text-ink-700 dark:text-cream-200 rounded-full flex items-center justify-center text-sm font-semibold relative">
+            <div className="w-7 h-7 bg-surface-muted border border-line text-ink rounded-full flex items-center justify-center text-xs font-semibold relative">
               {initials}
-              {user?.is_superuser && (
-                <Shield className="w-3 h-3 text-accent absolute -top-1 -right-1" />
-              )}
             </div>
-            <span className="text-sm text-ink-600 dark:text-ink-300 font-body hidden sm:block max-w-[160px] truncate">
+            <span className="text-sm text-ink-muted hidden sm:block max-w-[160px] truncate">
               {user?.email ?? 'User'}
             </span>
             {user?.is_superuser && (
-              <span className="text-xs bg-cream-200 dark:bg-ink-600 text-accent px-2 py-0.5 rounded-full font-semibold hidden sm:block">
-                Admin
+              <span className="hidden sm:block">
+                <Badge variant="outline">Admin</Badge>
               </span>
             )}
-            <ChevronDown className="w-4 h-4 text-ink-300" />
+            <ChevronDown className="w-4 h-4 text-ink-subtle" />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-ink-800 rounded-xl shadow-lg border border-ink-100/60 dark:border-ink-700/60 py-1 z-50 animate-scale-in">
-              <div className="px-4 py-3 border-b border-ink-100/60 dark:border-ink-700/60">
-                <p className="text-sm font-medium text-ink-900 dark:text-cream-100 truncate">{user?.name ?? 'User'}</p>
-                <p className="text-xs text-ink-400 truncate">{user?.email}</p>
+            <div
+              className="absolute right-0 mt-2 w-56 bg-surface-raised border border-line rounded-xl shadow-menu py-1 z-50 animate-scale-in"
+              data-od-id="user-dropdown"
+            >
+              <div className="px-4 py-3 border-b border-line">
+                <p className="text-sm font-medium text-ink truncate">{user?.name ?? 'User'}</p>
+                <p className="text-xs text-ink-subtle truncate">{user?.email}</p>
                 {user?.is_superuser && (
-                  <p className="text-xs text-accent font-semibold mt-1 flex items-center gap-1">
-                    <Shield className="w-3 h-3" /> Superuser
+                  <p className="mt-1.5">
+                    <Badge variant="outline">Superuser</Badge>
                   </p>
                 )}
               </div>
-              <button
+              <MenuItem
+                icon={LogOut}
+                destructive
+                data-od-id="logout-button"
                 onClick={() => {
                   setMenuOpen(false)
                   logout()
                 }}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-status-error hover:bg-cream-100 dark:hover:bg-ink-700 transition-colors duration-200"
               >
-                <LogOut className="w-4 h-4" />
                 Sign out
-              </button>
+              </MenuItem>
             </div>
           )}
         </div>

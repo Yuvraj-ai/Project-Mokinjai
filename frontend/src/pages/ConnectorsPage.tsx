@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Plug, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { listWorkspaces } from '../api/workspaces'
 import {
   createConnector,
@@ -11,6 +11,11 @@ import {
   type CatalogEntry,
   type Connector,
 } from '../api/connectors'
+import Button from '../components/ui/Button'
+import { Input, Label, Select } from '../components/ui/Field'
+import { Spinner, EmptyState } from '../components/ui/Feedback'
+import Badge from '../components/ui/Badge'
+import { cn } from '../lib/utils'
 
 function axiosDetail(error: unknown): string | null {
   if (!error || typeof error !== 'object' || !('response' in error)) return null
@@ -30,15 +35,15 @@ function axiosDetail(error: unknown): string | null {
   return null
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  enabled: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
-  error: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
-  pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-}
-
 const FIELD_LABELS: Record<string, string> = {
   database: 'Database name',
   path: 'Directory path',
+}
+
+const statusTones: Record<string, 'neutral' | 'success' | 'warning' | 'danger' | 'info'> = {
+  enabled: 'success',
+  error: 'danger',
+  pending: 'warning',
 }
 
 export default function ConnectorsPage() {
@@ -175,7 +180,7 @@ export default function ConnectorsPage() {
   if (loading || !workspaceId) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-5 h-5 text-accent animate-spin" />
+        <Spinner className="w-6 h-6" />
       </div>
     )
   }
@@ -184,161 +189,129 @@ export default function ConnectorsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-10">
-      <div className="flex items-end justify-between mb-8">
+      <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-display text-ink-900 dark:text-cream-100 tracking-tight leading-none">
-            Connectors
-          </h1>
-          <p className="text-ink-400 dark:text-ink-300 mt-2 text-sm font-body">
+          <h1 className="text-2xl font-semibold text-ink tracking-tight leading-tight">Connectors</h1>
+          <p className="mt-1 text-sm text-ink-muted">
             Enable a connector, give it credentials, and test it to see the tools it exposes.
           </p>
         </div>
-        <button
-          onClick={openNew}
-          disabled={usable.length === 0}
-          className="inline-flex items-center gap-2 bg-ink-800 dark:bg-cream-200 hover:bg-ink-900 dark:hover:bg-cream-300 text-cream-50 dark:text-ink-800 font-body font-medium py-2 px-5 rounded-lg text-sm disabled:opacity-60"
-        >
-          <Plus className="w-4 h-4" /> Add connector
-        </button>
+        <Button disabled={usable.length === 0} onClick={openNew}>
+          <Plus className="w-4 h-4" aria-hidden /> Add connector
+        </Button>
       </div>
 
       {showForm && entry && (
-        <form
-          className="mb-8 rounded-xl border border-ink-100/60 dark:border-ink-700/60 bg-white dark:bg-ink-800 p-5 space-y-4"
-          onSubmit={(event) => {
+        <div className="mb-8 rounded-xl border border-line bg-surface p-5">
+          <form onSubmit={(event) => {
             event.preventDefault()
             void handleSave()
-          }}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block text-xs font-body text-ink-400">
-              Connector
-              <select
-                value={entryId}
-                disabled={editingId !== null}
-                onChange={(event) => {
-                  setEntryId(event.target.value)
-                  setConfig({})
-                  setSecret('')
-                }}
-                className="mt-1 w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-ink-50/30 dark:bg-ink-700/50 px-3 py-2 text-sm text-ink-800 dark:text-cream-100 disabled:opacity-60"
-              >
-                {usable.map((item) => (
-                  <option key={item.id} value={item.id}>{item.display_name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs font-body text-ink-400">
-              Name
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                className="mt-1 w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-ink-50/30 dark:bg-ink-700/50 px-3 py-2 text-sm text-ink-800 dark:text-cream-100"
-              />
-            </label>
-            {entry.secret_label && (
-              <label className="block text-xs font-body text-ink-400 sm:col-span-2">
-                {entry.secret_label} {editingId ? '(blank keeps the saved secret)' : ''}
-                <input
-                  type="password"
-                  value={secret}
-                  onChange={(event) => setSecret(event.target.value)}
-                  required={!editingId}
-                  autoComplete="off"
-                  className="mt-1 w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-ink-50/30 dark:bg-ink-700/50 px-3 py-2 text-sm text-ink-800 dark:text-cream-100"
-                />
-              </label>
-            )}
-            {entry.config_fields.map((field) => (
-              <label key={field} className="block text-xs font-body text-ink-400">
-                {FIELD_LABELS[field] ?? field}
-                <input
-                  value={config[field] ?? ''}
-                  onChange={(event) =>
-                    setConfig((current) => ({ ...current, [field]: event.target.value }))
-                  }
+          }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label required>Connector</Label>
+                <Select
+                  value={entryId}
+                  disabled={editingId !== null}
+                  onChange={(event) => {
+                    setEntryId(event.target.value)
+                    setConfig({})
+                    setSecret('')
+                  }}
+                >
+                  {usable.map((item) => (
+                    <option key={item.id} value={item.id}>{item.display_name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label required>Name</Label>
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
                   required
-                  className="mt-1 w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-ink-50/30 dark:bg-ink-700/50 px-3 py-2 text-sm text-ink-800 dark:text-cream-100"
                 />
-              </label>
-            ))}
-          </div>
-          <p className="text-xs font-body text-ink-400">{entry.description}</p>
-          {formError && (
-            <p className="text-sm font-body text-status-error whitespace-pre-wrap">{formError}</p>
-          )}
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 bg-ink-800 dark:bg-cream-200 text-cream-50 dark:text-ink-800 font-body font-medium py-2 px-5 rounded-lg text-sm disabled:opacity-60"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editingId ? 'Save' : 'Add connector'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="text-sm font-body text-ink-400 hover:text-ink-700 dark:hover:text-cream-200"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+              </div>
+              {entry.secret_label && (
+                <div className="sm:col-span-2">
+                  <Label required={!editingId}>
+                    {entry.secret_label} {editingId ? '(blank keeps the saved secret)' : ''}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={secret}
+                    onChange={(event) => setSecret(event.target.value)}
+                    required={!editingId}
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+              {entry.config_fields.map((field) => (
+                <div key={field}>
+                  <Label required>{FIELD_LABELS[field] ?? field}</Label>
+                  <Input
+                    value={config[field] ?? ''}
+                    onChange={(event) =>
+                      setConfig((current) => ({ ...current, [field]: event.target.value }))
+                    }
+                    required
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-ink-muted">{entry.description}</p>
+            {formError && (
+              <p className="mt-2 text-xs text-status-error whitespace-pre-wrap">{formError}</p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+                {saving ? 'Saving…' : editingId ? 'Save' : 'Add connector'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
       )}
 
       {connectors.length === 0 ? (
-        <div className="text-center py-20">
-          <Plug className="w-10 h-10 text-cream-300 dark:text-ink-600 mx-auto mb-4" strokeWidth={1.5} />
-          <h3 className="text-2xl font-display italic text-ink-900 dark:text-cream-100 mb-2">
-            No connectors yet
-          </h3>
-          <p className="text-sm text-ink-400 dark:text-ink-300 font-body">
-            Add one from the catalog and test it to see the tools it exposes.
-          </p>
+        <div className="bg-surface border border-line rounded-xl">
+          <EmptyState
+            title="No connectors yet"
+            description="Add one from the catalog and test it to see the tools it exposes."
+          />
         </div>
       ) : (
         <div className="space-y-3">
           {connectors.map((connector) => (
-            <div
-              key={connector.id}
-              className="rounded-xl border border-ink-100/60 dark:border-ink-700/60 bg-white dark:bg-ink-800 p-4"
-            >
+            <div key={connector.id} className="bg-surface rounded-xl border border-line p-4">
               <div className="flex items-start justify-between gap-3">
                 <button onClick={() => openExisting(connector)} className="text-left">
-                  <div className="font-body font-medium text-ink-900 dark:text-cream-100">
-                    {connector.name}
-                  </div>
-                  <div className="text-xs text-ink-400 mt-1">
-                    {connector.display_name} ·{' '}
-                    {connector.transport === 'stdio' ? 'Local' : 'URL'} · {connector.auth_type}
-                    {' · '}
+                  <div className="text-sm font-medium text-ink">{connector.name}</div>
+                  <div className="text-xs text-ink-muted mt-1">
+                    {entry ? entry.display_name : ''} ·
+                    {connector.transport === 'stdio' ? 'Local' : 'URL'} · {connector.auth_type} ·
                     {connector.has_auth ? 'credentials saved' : 'no credentials'}
                   </div>
                 </button>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded ${
-                      STATUS_STYLES[connector.status] ?? STATUS_STYLES.pending
-                    }`}
-                  >
+                  <Badge tone={statusTones[connector.status] ?? 'warning'}>
                     {connector.status}
-                  </span>
+                  </Badge>
                   <button
                     onClick={() => void handleTest(connector)}
                     disabled={busyId === connector.id}
                     title={connector.last_tested_at ? 'Re-test connection' : 'Test connection'}
-                    className="text-ink-400 hover:text-ink-800 dark:hover:text-cream-100 disabled:opacity-40"
+                    className="rounded-md p-1.5 text-ink-subtle transition-colors disabled:opacity-40 hover:bg-surface-muted hover:text-ink"
                   >
-                    <RefreshCw
-                      className={`w-4 h-4 ${busyId === connector.id ? 'animate-spin' : ''}`}
-                    />
+                    <RefreshCw className={`w-4 h-4 ${busyId === connector.id ? 'animate-spin' : ''}`} aria-hidden />
                   </button>
                   <button
                     onClick={() => void handleDelete(connector)}
                     title="Remove"
-                    className="text-ink-300 hover:text-status-error"
+                    aria-label={`Remove ${connector.name}`}
+                    className="rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-status-error-soft hover:text-status-error"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -350,14 +323,14 @@ export default function ConnectorsPage() {
                   {connector.tools.map((tool) => (
                     <span
                       key={tool}
-                      className="text-[11px] font-mono px-2 py-0.5 rounded bg-ink-100/70 dark:bg-ink-700/60 text-ink-600 dark:text-cream-200"
+                      className="rounded-md border border-line bg-surface-muted px-2 py-0.5 font-mono text-[11px] text-ink-muted"
                     >
                       {tool}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-xs font-body text-ink-400">
+                <p className="mt-3 text-xs text-ink-subtle">
                   {connector.status === 'pending'
                     ? 'No tools recorded — run a test.'
                     : 'The last test found no tools.'}
@@ -365,7 +338,7 @@ export default function ConnectorsPage() {
               )}
 
               {connector.last_error && (
-                <p className="mt-3 text-sm font-body text-status-error">{connector.last_error}</p>
+                <p className="mt-3 text-xs text-status-error">{connector.last_error}</p>
               )}
             </div>
           ))}
@@ -373,26 +346,25 @@ export default function ConnectorsPage() {
       )}
 
       <div className="mt-10">
-        <h2 className="text-xs uppercase tracking-wide font-body text-ink-400 mb-3">Catalog</h2>
+        <h2 className="text-[13px] font-semibold text-ink mb-3">Catalog</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {catalog.map((item) => (
             <div
               key={item.id}
-              className={`rounded-lg border border-ink-100/60 dark:border-ink-700/60 p-3 ${
-                item.auth_type === 'oauth' ? 'opacity-60' : ''
-              }`}
+              className={cn(
+                'bg-surface rounded-lg border border-line p-3',
+                item.auth_type === 'oauth' ? 'opacity-60' : '',
+              )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-body text-sm text-ink-800 dark:text-cream-100">
-                  {item.display_name}
-                </span>
-                <span className="text-[10px] uppercase tracking-wide text-ink-400">
+                <span className="text-sm text-ink">{item.display_name}</span>
+                <span className="font-mono text-[10px] uppercase tracking-wide text-ink-subtle">
                   {item.transport === 'stdio' ? 'Local' : 'URL'}
                 </span>
               </div>
-              <p className="text-xs text-ink-400 mt-1">{item.description}</p>
+              <p className="text-xs text-ink-muted mt-1">{item.description}</p>
               {item.auth_type === 'oauth' && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-300 mt-1">
+                <p className="text-[11px] font-mono text-[11px] uppercase tracking-wide text-status-warning mt-1">
                   OAuth — not yet supported
                 </p>
               )}
