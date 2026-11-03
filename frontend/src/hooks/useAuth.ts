@@ -4,15 +4,17 @@ import { loginApi, getMe } from '../api/auth'
 import { validateAdminOTP } from '../api/otp'
 
 export function useAuth() {
-  const { user, isAuthenticated, setUser, login, logout } = useAuthStore()
+  const { user, isAuthenticated, setUser, login, logout, forceSignOut } = useAuthStore()
 
   useEffect(() => {
     if (isAuthenticated && !user) {
       getMe()
         .then(setUser)
-        .catch(() => logout())
+        // The session is already dead here — a server-side logout POST would
+        // just 401. Clear locally and let the router land on /login.
+        .catch(() => forceSignOut())
     }
-  }, [isAuthenticated, user, setUser, logout])
+  }, [isAuthenticated, user, setUser, logout, forceSignOut])
 
   const handleLogin = useCallback(
     async (email: string, password: string) => {

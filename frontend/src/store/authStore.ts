@@ -9,6 +9,9 @@ interface AuthState {
   isAuthenticated: boolean
   login: (user: User, accessToken: string, refreshToken: string) => void
   logout: () => Promise<void>
+  /** Server-side sign-out without an API call — the auth-death path shared by
+   * the interceptor and the stream clients via `handleAuthFailure()`. */
+  forceSignOut: () => void
   setUser: (user: User) => void
 }
 
@@ -31,6 +34,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Best effort. A failed call must not leave the user stuck with a token
       // they believe has been discarded, so clear locally either way.
     }
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    set({ user: null, isAuthenticated: false })
+  },
+
+  forceSignOut: () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     set({ user: null, isAuthenticated: false })

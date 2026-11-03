@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { handleAuthFailure, refreshAccessToken } from './authSession'
 
 // No Content-Type here on purpose. Axios sets `application/json` itself for an object
 // body, while a FormData body must be left alone so the browser can add the multipart
@@ -16,31 +17,33 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// A 401 from the auth endpoints is an answer (wrong password, dead refresh
+// token), not an expired session — refreshing and retrying there caused the
+// login page to reload itself and churn tokens.
+function isAuthEndpoint(url: string | undefined): boolean {
+  return !!url && url.includes('/api/auth/')
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
+    ) {
       originalRequest._retry = true
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (refreshToken) {
-        try {
-          const { data } = await axios.post(
-            `${apiClient.defaults.baseURL}/api/auth/refresh`,
-            { refresh_token: refreshToken }
-          )
-          localStorage.setItem('access_token', data.access_token)
-          localStorage.setItem('refresh_token', data.refresh_token)
-          originalRequest.headers.Authorization = `Bearer ${data.access_token}`
-          return apiClient(originalRequest)
-        } catch {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          window.location.href = '/login'
-        }
-      } else {
-        window.location.href = '/login'
+      // One shared refresh for every concurrent 401; the callers queue on the
+      // same promise instead of each firing their own POST /api/auth/refresh.
+      if (await refreshAccessToken()) {
+        originalRequest.headers.Authorization = `Bearer ${localStorage.getItem('access_token')}`
+        return apiClient(originalRequest)
       }
+      // Session over: clear credentials and the auth store once. ProtectedRoute
+      // then navigates to /login — no hard reload, no repeated redirects.
+      handleAuthFailure()
     }
     return Promise.reject(error)
   }

@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { handleAuthFailure, refreshAccessToken } from './authSession'
 
 /**
  * Playground chat: server-owned sessions. The client sends only the new
@@ -102,6 +103,28 @@ interface RawSseEvent {
   data: Record<string, unknown>
 }
 
+function openStream(
+  workspaceId: string,
+  sessionId: string,
+  content: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  const base = import.meta.env.VITE_API_URL || ''
+  const token = localStorage.getItem('access_token')
+  return fetch(
+    `${base}/api/workspaces/${workspaceId}/playground/sessions/${sessionId}/chat`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ content }),
+      signal,
+    }
+  )
+}
+
 function parseEvent(block: string): RawSseEvent | null {
   let event = ''
   let data = ''
@@ -119,7 +142,10 @@ function parseEvent(block: string): RawSseEvent | null {
 
 /**
  * SSE over `fetch` — Axios cannot read a stream. The body carries only the
- * new message content; the backend owns the history.
+ * new message content; the backend owns the history. A 401 gets one shared
+ * refresh attempt and a stream retry; a dead session signs out exactly once.
+ * (This path used to hard-redirect to /login without clearing anything,
+ * which let the login page bounce the user straight back into the app.)
  */
 export async function* streamSessionChat(
   workspaceId: string,
@@ -127,20 +153,16 @@ export async function* streamSessionChat(
   content: string,
   signal?: AbortSignal
 ): AsyncGenerator<PlaygroundEvent> {
-  const base = import.meta.env.VITE_API_URL || ''
-  const token = localStorage.getItem('access_token')
-  const response = await fetch(
-    `${base}/api/workspaces/${workspaceId}/playground/sessions/${sessionId}/chat`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ content }),
-      signal,
+  let response = await openStream(workspaceId, sessionId, content, signal)
+  if (response.status === 401) {
+    if (await refreshAccessToken()) {
+      response = await openStream(workspaceId, sessionId, content, signal)
     }
-  )
+  }
+  if (response.status === 401) {
+    handleAuthFailure()
+    throw new Error('Your session has ended. Sign in again to continue.')
+  }
 
   if (!response.ok || !response.body) {
     let detail = 'The chat could not be started.'
@@ -150,7 +172,6 @@ export async function* streamSessionChat(
     } catch {
       // A non-JSON error body keeps the default message.
     }
-    if (response.status === 401) window.location.href = '/login'
     throw new Error(detail)
   }
 
