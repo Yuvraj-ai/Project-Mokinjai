@@ -12,6 +12,7 @@ from app.models.tool import Tool
 from app.models.skill import Skill
 from app.models.external_database import ExternalDatabaseConnection
 from app.models.connector import ConnectorInstance
+from app.models.chat import ChatMessage, ChatSession
 from app.models.agent import (
     Agent,
     AgentConnector,
@@ -42,6 +43,8 @@ __all__ = [
     "Skill",
     "ExternalDatabaseConnection",
     "ConnectorInstance",
+    "ChatSession",
+    "ChatMessage",
     "Agent",
     "AgentTool",
     "AgentSkill",
