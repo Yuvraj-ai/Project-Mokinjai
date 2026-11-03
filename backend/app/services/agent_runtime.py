@@ -33,6 +33,7 @@ from app.crypto import decrypt_api_key
 from app.database import async_session
 from app.logging import logger
 from app.models.agent import Agent
+from app.models.chat import ChatMessage, ChatSession
 from app.models.execution import Execution
 from app.models.knowledge import Document
 from app.models.llm_profile import LlmProfile
@@ -64,6 +65,76 @@ from app.tools.registry import list_builtin_tools
 
 class AgentRuntimeError(Exception):
     """A saved agent cannot be run as configured."""
+
+
+# Playground activity caps (spec §4): one serialized args/result per event,
+# reasoning text, and the number of events kept for a single turn.
+ACTIVITY_VALUE_CAP = 8_000
+REASONING_CAP = 32_000
+ACTIVITY_EVENT_CAP = 200
+
+_TRUNCATION_MARKER = "...[truncated]"
+
+
+def _tool_kind(name: str) -> str:
+    """Card family for a tool name (spec §6). Connector and user tools are
+    indistinguishable by name alone and both land on the generic `tool` card;
+    attribution by build-time data is a future refinement."""
+    lowered = (name or "").lower()
+    if lowered in ("query_data_source", "describe_data_source"):
+        return "sql"
+    if lowered == "execute_python":
+        return "code"
+    if lowered == "read_skill":
+        return "skill"
+    if "tavily" in lowered or "exa" in lowered or lowered == "web_search":
+        return "web"
+    if lowered.startswith("ask_"):
+        return "subagent"
+    return "tool"
+
+
+def _reasoning_delta(chunk: Any) -> str:
+    """Thinking text carried by a stream chunk, across provider shapes.
+
+    Anthropic emits content blocks with type `thinking`; OpenAI-compatible
+    endpoints (DeepSeek-style) put `reasoning_content` in additional_kwargs.
+    Providers that emit neither simply never populate the thinking card.
+    """
+    parts: list[str] = []
+    content = getattr(chunk, "content", None)
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") in ("thinking", "reasoning"):
+                text = block.get("thinking") or block.get("text") or block.get("reasoning")
+                if text:
+                    parts.append(str(text))
+    kwargs = getattr(chunk, "additional_kwargs", None)
+    if isinstance(kwargs, dict):
+        value = kwargs.get("reasoning_content") or kwargs.get("reasoning")
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, dict):
+            text = value.get("text") or value.get("content")
+            if text:
+                parts.append(str(text))
+    return "".join(parts)
+
+
+def _cap(value: Any, limit: int = ACTIVITY_VALUE_CAP) -> Any:
+    """Bound a persisted/streamed value: past the limit, keep a truncated
+    prefix — parsed back when it still parses, as text otherwise."""
+    try:
+        serialized = json.dumps(value, default=str)
+    except (TypeError, ValueError):
+        return _cap(str(value), limit)
+    if len(serialized) <= limit:
+        return value
+    truncated = serialized[:limit] + _TRUNCATION_MARKER
+    try:
+        return json.loads(truncated)
+    except json.JSONDecodeError:
+        return truncated
 
 
 _PROVIDER_TARGET = {
@@ -590,6 +661,306 @@ async def stream_chat(
         try:
             if session is not None:
                 await asyncio.to_thread(session.close)
+        finally:
+            try:
+                if reserved_mb:
+                    release(workspace_id, reserved_mb)
+            finally:
+                if staging is not None:
+                    shutil.rmtree(staging, ignore_errors=True)
+
+
+async def _write_assistant_message(
+    assistant_message_id: str,
+    *,
+    content: str,
+    reasoning: str,
+    activity: list[dict],
+    structured: Any,
+    status: str,
+    usage: dict[str, int],
+    cost: float | None,
+) -> None:
+    async with async_session() as db:
+        row = await db.get(ChatMessage, assistant_message_id)
+        if row is None:
+            return
+        row.content = content
+        row.reasoning = reasoning or None
+        row.activity = activity or None
+        row.structured = structured
+        row.status = status
+        row.usage = usage
+        row.cost_usd = Decimal(str(round(cost, 8))) if cost is not None else None
+        await db.commit()
+
+
+async def _delete_assistant_message(assistant_message_id: str) -> None:
+    async with async_session() as db:
+        row = await db.get(ChatMessage, assistant_message_id)
+        if row is not None:
+            await db.delete(row)
+            await db.commit()
+
+
+async def stream_turn(
+    workspace_id: str,
+    session_id: str,
+    content: str,
+    execution_id: str,
+) -> AsyncIterator[dict[str, Any]]:
+    """Run one playground turn (spec §6-7): persist both messages, stream the
+    v2 protocol, and keep the assistant row's activity log identical to what
+    was streamed so a replay renders exactly as the live turn did.
+
+    The client sends only `content`; history is loaded from chat_messages.
+    Live config (P4): the agent is re-resolved from its saved row every turn.
+    """
+    started = time.monotonic()
+    sandbox: Any | None = None
+    staging: Path | None = None
+    reserved_mb = 0
+
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    activity: list[dict[str, Any]] = []
+    tool_started: dict[str, float] = {}
+    usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+    }
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
+
+    def _remember(event: dict[str, Any]) -> None:
+        if len(activity) < ACTIVITY_EVENT_CAP:
+            activity.append(event)
+
+    try:
+        async with async_session() as db:
+            chat_session = await db.get(ChatSession, session_id)
+            if chat_session is None or chat_session.workspace_id != workspace_id:
+                raise AgentRuntimeError("The chat session no longer exists.")
+            agent = (
+                await db.execute(
+                    select(Agent).where(
+                        Agent.id == chat_session.agent_id,
+                        Agent.workspace_id == workspace_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if agent is None:
+                raise AgentRuntimeError("The agent no longer exists.")
+
+            history_rows = (
+                (
+                    await db.execute(
+                        select(ChatMessage)
+                        .where(ChatMessage.session_id == session_id)
+                        .order_by(ChatMessage.seq)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            # Both rows exist before any failure can happen: the message event
+            # carries real ids, and an error turn deletes the empty assistant
+            # row rather than leaving a phantom bubble.
+            user_row = ChatMessage(session_id=session_id, role="user", content=content)
+            assistant_row = ChatMessage(
+                session_id=session_id,
+                role="assistant",
+                content="",
+                execution_id=execution_id,
+            )
+            db.add_all([user_row, assistant_row])
+            if chat_session.title == "New session":
+                first_line = content.split("\n", 1)[0].strip()
+                chat_session.title = first_line[:60] or "New session"
+            await db.commit()
+            await db.refresh(user_row)
+            await db.refresh(assistant_row)
+            user_message_id = user_row.id
+            assistant_message_id = assistant_row.id
+
+            validated = await validate_agent(
+                db, workspace_id, await saved_input(db, agent), agent_id=agent.id
+            )
+            staging, filenames = await _stage_files(validated.attached_documents)
+            sandbox, reserved_mb = _open_session(
+                workspace_id, validated, str(staging) if staging else None
+            )
+            tools = await build_tools(
+                db, workspace_id, validated, sandbox, depth=0, filenames=filenames
+            )
+            graph = build_graph(validated, agent, tools, streaming=True)
+            await _bump_run_usage(db, workspace_id, validated)
+            await db.commit()
+
+        yield {
+            "event": "message",
+            "data": {
+                "user_message_id": user_message_id,
+                "assistant_message_id": assistant_message_id,
+            },
+        }
+
+        if filenames:
+            staged_event: dict[str, Any] = {"type": "files_staged", "names": list(filenames)}
+            _remember(staged_event)
+            yield {"event": "activity", "data": staged_event}
+
+        history = [
+            HumanMessage(content=row.content)
+            if row.role == "user"
+            else AIMessage(content=row.content)
+            for row in history_rows
+        ]
+        history.append(HumanMessage(content=content))
+
+        streamed = False
+        final_text = ""
+        structured: Any = None
+
+        async for event in graph.astream_events({"messages": history}, version="v2"):
+            kind = event["event"]
+            metadata = event.get("metadata") or {}
+            nested = "|" in str(metadata.get("langgraph_checkpoint_ns", ""))
+
+            if kind == "on_chat_model_stream" and not nested:
+                chunk = event["data"].get("chunk")
+                reasoning = _reasoning_delta(chunk)
+                if reasoning:
+                    reasoning_parts.append(reasoning)
+                    yield {"event": "reasoning", "data": {"delta": reasoning}}
+                delta = _message_text(chunk)
+                if delta:
+                    streamed = True
+                    content_parts.append(delta)
+                    yield {"event": "token", "data": {"delta": delta}}
+
+            elif kind == "on_chat_model_end":
+                output = event["data"].get("output")
+                if isinstance(output, AIMessage):
+                    _add_usage(usage, output.usage_metadata)
+
+            elif kind == "on_tool_start" and not nested:
+                run_id = str(event.get("run_id") or event.get("name", ""))
+                tool_started[run_id] = time.monotonic()
+                name = event.get("name", "")
+                entry = {
+                    "type": "tool_start",
+                    "id": run_id,
+                    "name": name,
+                    "kind": _tool_kind(name),
+                    "args": _cap(event["data"].get("input") or {}),
+                }
+                _remember(entry)
+                yield {"event": "activity", "data": entry}
+
+            elif kind == "on_tool_end" and not nested:
+                run_id = str(event.get("run_id") or event.get("name", ""))
+                name = event.get("name", "")
+                started_at = tool_started.pop(run_id, None)
+                duration_ms = (
+                    int((time.monotonic() - started_at) * 1000) if started_at else None
+                )
+                entry = {
+                    "type": "tool_end",
+                    "id": run_id,
+                    "name": name,
+                    "kind": _tool_kind(name),
+                    "result": _cap(event["data"].get("output")),
+                    "duration_ms": duration_ms,
+                }
+                _remember(entry)
+                yield {"event": "activity", "data": entry}
+
+            elif (
+                kind == "on_chain_end"
+                and event.get("name") == "LangGraph"
+                and not event.get("parent_ids")
+            ):
+                output = event["data"].get("output") or {}
+                if isinstance(output, dict):
+                    final_messages = output.get("messages") or []
+                    if final_messages:
+                        final_text = _message_text(final_messages[-1])
+                    structured = output.get("structured_response")
+
+        text = final_text or "".join(content_parts)
+        if not streamed and text:
+            yield {"event": "token", "data": {"delta": text}}
+
+        cost = _cost(validated.profile, usage)
+        await _write_assistant_message(
+            assistant_message_id,
+            content=text,
+            reasoning="".join(reasoning_parts)[:REASONING_CAP],
+            activity=list(activity),
+            structured=(
+                structured.model_dump() if hasattr(structured, "model_dump") else structured
+            ),
+            status="completed",
+            usage=usage,
+            cost=cost,
+        )
+        await _mark_execution(execution_id, "completed", usage=usage, cost=cost, started=started)
+        yield {
+            "event": "done",
+            "data": {"usage": usage, "cost_usd": round(cost, 6), "status": "completed"},
+        }
+
+    except (asyncio.CancelledError, GeneratorExit):
+        # Stop button (P8): whatever streamed so far stays, marked stopped.
+        if assistant_message_id is not None:
+            partial = "".join(content_parts)
+            await _write_assistant_message(
+                assistant_message_id,
+                content=partial,
+                reasoning="".join(reasoning_parts)[:REASONING_CAP],
+                activity=list(activity),
+                structured=None,
+                status="stopped",
+                usage=usage,
+                cost=None,
+            )
+            await _mark_execution(execution_id, "cancelled", started=started)
+        raise
+
+    except CompositionError as exc:
+        detail = "; ".join(f"{error.field}: {error.message}" for error in exc.errors)
+        await _mark_execution(execution_id, "failed", error=detail, started=started)
+        if assistant_message_id is not None and not content_parts and not reasoning_parts and not activity:
+            await _delete_assistant_message(assistant_message_id)
+        yield {"event": "error", "data": {"detail": detail}}
+
+    except Exception as exc:
+        logger.exception(f"Playground turn {execution_id} failed")
+        detail = str(exc).strip().replace("\n", " ") or exc.__class__.__name__
+        await _mark_execution(execution_id, "failed", error=detail, started=started)
+        if assistant_message_id is not None and not content_parts and not reasoning_parts and not activity:
+            await _delete_assistant_message(assistant_message_id)
+        else:
+            await _write_assistant_message(
+                assistant_message_id,
+                content="".join(content_parts),
+                reasoning="".join(reasoning_parts)[:REASONING_CAP],
+                activity=list(activity),
+                structured=None,
+                status="failed",
+                usage=usage,
+                cost=None,
+            )
+        yield {"event": "error", "data": {"detail": detail}}
+
+    finally:
+        try:
+            if sandbox is not None:
+                await asyncio.to_thread(sandbox.close)
         finally:
             try:
                 if reserved_mb:
