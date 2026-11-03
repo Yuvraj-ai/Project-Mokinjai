@@ -34,6 +34,12 @@ class WorkflowExecutor:
             logger.error(f"Execution {execution_id} not found")
             raise ValueError(f"Execution {execution_id} not found")
 
+        # The cancel endpoint marks the row "cancelled"; honour it instead of
+        # starting a run the user already stopped.
+        if execution.status == "cancelled":
+            logger.info(f"Execution {execution_id} was cancelled before it started")
+            return execution
+
         result = await self.db.execute(
             select(Workflow).where(Workflow.id == execution.workflow_id)
         )
@@ -62,7 +68,23 @@ class WorkflowExecutor:
 
             context = ExecutionContext(execution.input_data)
 
+            cancelled = False
             for node_id in sorted_nodes:
+                # Cancellation is checked before each node. A node already in
+                # flight runs to completion; nothing after the check starts.
+                if await self._is_cancelled(execution_id):
+                    cancelled = True
+                    total_time = int((time.time() - start_time) * 1000)
+                    execution.status = "cancelled"
+                    execution.execution_trace = {"nodes": context.trace}
+                    execution.execution_time_ms = total_time
+                    execution.completed_at = datetime.now(timezone.utc)
+                    logger.info(
+                        f"Execution {execution_id} cancelled after {total_time}ms — "
+                        f"{len(context.trace)} node(s) had run"
+                    )
+                    break
+
                 if context.is_skipped(node_id):
                     context.add_trace_entry(node_id, "skipped", "skipped")
                     continue
@@ -100,14 +122,15 @@ class WorkflowExecutor:
                     logger.error(f"Node {node_id} ({node_type}) failed after {node_duration}ms: {e}")
                     raise
 
-            total_time = int((time.time() - start_time) * 1000)
-            execution.status = "completed"
-            execution.output_data = context.get_final_output()
-            execution.execution_trace = {"nodes": context.trace}
-            execution.execution_time_ms = total_time
-            execution.token_usage = context.total_token_usage
-            execution.completed_at = datetime.now(timezone.utc)
-            logger.info(f"Execution {execution_id} completed in {total_time}ms")
+            if not cancelled:
+                total_time = int((time.time() - start_time) * 1000)
+                execution.status = "completed"
+                execution.output_data = context.get_final_output()
+                execution.execution_trace = {"nodes": context.trace}
+                execution.execution_time_ms = total_time
+                execution.token_usage = context.total_token_usage
+                execution.completed_at = datetime.now(timezone.utc)
+                logger.info(f"Execution {execution_id} completed in {total_time}ms")
 
         except Exception as e:
             total_time = int((time.time() - start_time) * 1000)
@@ -121,6 +144,18 @@ class WorkflowExecutor:
         await self.db.commit()
         await self.db.refresh(execution)
         return execution
+
+    async def _is_cancelled(self, execution_id: str) -> bool:
+        """Read the execution's status fresh from the database.
+
+        The cancel endpoint commits on a different session, so a stale in-memory
+        status would never show it. Selecting the column (not the entity) also
+        bypasses this session's identity map.
+        """
+        result = await self.db.execute(
+            select(Execution.status).where(Execution.id == execution_id)
+        )
+        return result.scalar_one_or_none() == "cancelled"
 
     def _handle_branching(
         self, dag: DAGBuilder, node_id: str, branch: str, context: ExecutionContext

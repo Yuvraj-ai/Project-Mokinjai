@@ -297,14 +297,16 @@ class TestHttpRequestModule:
 class TestAgentModule:
     @pytest.mark.asyncio
     async def test_unsupported_provider(self):
+        # A provider the module cannot call must fail the node, not answer with a
+        # fake-success string the trace would record as a real model response.
         mod = AgentModule()
         ctx = ExecutionContext()
-        result = await mod.execute(
-            {"provider": "unsupported"},
-            {"input": "hello"},
-            ctx,
-        )
-        assert "Unsupported provider" in result["response"]
+        with pytest.raises(ValueError, match="not supported"):
+            await mod.execute(
+                {"provider": "gemini"},
+                {"input": "hello"},
+                ctx,
+            )
 
     @pytest.mark.asyncio
     async def test_openai_call(self):
@@ -353,3 +355,102 @@ class TestAgentModule:
                 )
                 assert result["output"] == "Claude response"
                 assert ctx.total_token_usage["prompt_tokens"] == 10
+
+
+class TestFrontendContractAlignment:
+    """The canvas UI offers options the backend modules must actually implement:
+    not_contains / is_empty conditions, JSON-string headers, and the input node's
+    configured initial value."""
+
+    @pytest.mark.asyncio
+    async def test_conditional_not_contains(self):
+        mod = ConditionalModule()
+        ctx = ExecutionContext()
+        miss = await mod.execute(
+            {"conditionType": "not_contains", "conditionValue": "z"}, {"input": "hello"}, ctx
+        )
+        hit = await mod.execute(
+            {"conditionType": "not_contains", "conditionValue": "ell"}, {"input": "hello"}, ctx
+        )
+        assert miss["branch"] == "true"
+        assert hit["branch"] == "false"
+
+    @pytest.mark.asyncio
+    async def test_conditional_is_empty(self):
+        mod = ConditionalModule()
+        empty = await mod.execute(
+            {"conditionType": "is_empty", "conditionValue": ""}, {"input": ""}, ExecutionContext()
+        )
+        filled = await mod.execute(
+            {"conditionType": "is_empty", "conditionValue": ""}, {"input": "data"}, ExecutionContext()
+        )
+        assert empty["branch"] == "true"
+        assert filled["branch"] == "false"
+
+    @pytest.mark.asyncio
+    async def test_http_request_accepts_headers_as_a_json_string(self):
+        mod = HttpRequestModule()
+        ctx = ExecutionContext()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.json.return_value = {"ok": True}
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.engine.modules.http_request.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value = mock_client
+            await mod.execute(
+                {
+                    "method": "GET",
+                    "url": "https://example.com",
+                    "headers": '{"X-Key": "abc"}',
+                },
+                {"input": "hi"},
+                ctx,
+            )
+
+            _, kwargs = mock_client.request.call_args
+            assert kwargs["headers"] == {"X-Key": "abc"}
+
+    @pytest.mark.asyncio
+    async def test_http_request_with_malformed_header_json_sends_no_headers(self):
+        mod = HttpRequestModule()
+        ctx = ExecutionContext()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {}
+        mock_response.json.return_value = {"ok": True}
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.engine.modules.http_request.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value = mock_client
+            await mod.execute(
+                {"method": "GET", "url": "https://example.com", "headers": "not json"},
+                {"input": "hi"},
+                ctx,
+            )
+
+            _, kwargs = mock_client.request.call_args
+            assert kwargs["headers"] == {}
+
+    @pytest.mark.asyncio
+    async def test_input_node_falls_back_to_its_configured_value(self):
+        ctx = ExecutionContext(None)
+        result = await InputModule().execute({"value": "seed text"}, {}, ctx)
+        assert result["output"] == "seed text"
+
+    @pytest.mark.asyncio
+    async def test_request_input_wins_over_the_node_value(self):
+        ctx = ExecutionContext({"message": "from request"})
+        result = await InputModule().execute({"value": "seed text"}, {}, ctx)
+        assert result["output"] == {"message": "from request"}

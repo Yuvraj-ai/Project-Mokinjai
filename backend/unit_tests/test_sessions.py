@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.models.execution import Execution
 from app.models.session import Session
 from app.services.sessions import (
     create_session,
@@ -491,3 +492,80 @@ async def test_websocket_rejects_an_invalid_token():
 
     assert socket.closed_with == 4001
     assert socket.accepted is False
+
+
+# ---------------------------------------------------------------------------
+# Authorisation: a live session proves identity, not the right to watch an
+# execution. The socket must also verify the caller belongs to the execution's
+# workspace before events flow.
+
+
+async def _ws_token_for(db_session, user) -> str:
+    from app.services.sessions import create_session
+
+    session = await create_session(
+        db_session, user_id=user.id, refresh_token=f"fixture-ws-{user.id}"
+    )
+    return create_access_token({"sub": user.id, "email": user.email, "sid": session.id})
+
+
+async def _execution_for(db_session, workspace_id: str) -> Execution:
+    execution = Execution(
+        workspace_id=workspace_id,
+        workflow_id=None,
+        status="pending",
+        trigger_type="manual",
+    )
+    db_session.add(execution)
+    await db_session.commit()
+    await db_session.refresh(execution)
+    return execution
+
+
+async def test_websocket_rejects_a_non_member_of_the_executions_workspace(
+    db_session, session_factory, monkeypatch, test_workspace, viewer_user
+):
+    from app.websocket import execution_ws
+
+    monkeypatch.setattr(execution_ws, "async_session", session_factory)
+    execution = await _execution_for(db_session, test_workspace.id)
+    token = await _ws_token_for(db_session, viewer_user)
+
+    socket = _FakeWebSocket(token=token)
+    await execution_ws.execution_websocket(socket, execution.id)
+
+    assert socket.closed_with == 4003, "a non-member must not watch the execution"
+    assert socket.accepted is False, "it must be refused before being accepted"
+
+
+async def test_websocket_rejects_when_the_execution_does_not_exist(
+    db_session, session_factory, monkeypatch, test_workspace, test_user
+):
+    from app.websocket import execution_ws
+
+    monkeypatch.setattr(execution_ws, "async_session", session_factory)
+    token = await _ws_token_for(db_session, test_user)
+
+    socket = _FakeWebSocket(token=token)
+    await execution_ws.execution_websocket(socket, "no-such-execution")
+
+    assert socket.closed_with == 4004
+    assert socket.accepted is False
+
+
+async def test_websocket_accepts_a_workspace_member(
+    db_session, session_factory, monkeypatch, test_workspace, test_user
+):
+    from fastapi import WebSocketDisconnect
+
+    from app.websocket import execution_ws
+
+    monkeypatch.setattr(execution_ws, "async_session", session_factory)
+    execution = await _execution_for(db_session, test_workspace.id)
+    token = await _ws_token_for(db_session, test_user)
+
+    socket = _FakeWebSocket(token=token)
+    await execution_ws.execution_websocket(socket, execution.id)
+
+    assert socket.accepted is True, "an owner-member may watch the execution"
+    assert socket.closed_with is None, "the member is not refused"

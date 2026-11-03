@@ -10,12 +10,19 @@ from app.engine.modules.http_request import HttpRequestModule
 
 
 class InputModule(BaseModule):
-    """Input module - passes through the workflow's initial input."""
+    """Input module - passes through the workflow's initial input.
+
+    Falls back to the node's own configured "value" when the request carried no
+    input data — that is what the properties panel's "Initial Value" field is for.
+    """
 
     module_type = "input"
 
     async def execute(self, config, inputs, context):
-        return {"output": inputs.get("input", context.input_data)}
+        output = inputs.get("input", context.input_data)
+        if not output and config.get("value"):
+            output = config.get("value")
+        return {"output": output}
 
 
 class ModuleRegistry:

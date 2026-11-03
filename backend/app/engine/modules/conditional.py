@@ -35,10 +35,14 @@ class ConditionalModule(BaseModule):
 
         if condition_type == "contains":
             return condition_value.lower() in input_str.lower()
+        elif condition_type == "not_contains":
+            return condition_value.lower() not in input_str.lower()
         elif condition_type == "equals":
             return input_str.strip() == condition_value.strip()
         elif condition_type == "not_equals":
             return input_str.strip() != condition_value.strip()
+        elif condition_type == "is_empty":
+            return input_str.strip() == ""
         elif condition_type == "regex":
             return bool(re.search(condition_value, input_str))
         elif condition_type == "greater_than":

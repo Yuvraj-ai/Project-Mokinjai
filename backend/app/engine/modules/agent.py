@@ -37,7 +37,12 @@ class AgentModule(BaseModule):
                 model, system_prompt, input_text, temperature, max_tokens, settings, context
             )
         else:
-            return {"response": f"[Unsupported provider: {provider}]", "token_usage": {}}
+            # Fail the node instead of returning a string that looks like a model
+            # response — the trace would record a fake success as real output.
+            raise ValueError(
+                f"provider '{provider}' is not supported by the agent node; "
+                "supported providers: openai, anthropic"
+            )
 
     async def _call_openai(
         self, model, system_prompt, input_text, temperature, max_tokens, settings, context

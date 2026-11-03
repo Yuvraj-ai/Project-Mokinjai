@@ -1,8 +1,11 @@
 import json
 from fastapi import WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 from app.database import async_session
 from app.logging import logger
 from app.middleware.auth import resolve_session_and_user
+from app.models.execution import Execution
+from app.models.workspace import WorkspaceMember
 from app.services.sessions import session_is_live
 from app.utils.errors import UnauthorizedException
 
@@ -55,12 +58,37 @@ async def execution_websocket(websocket: WebSocket, execution_id: str):
 
     async with async_session() as db:
         try:
-            session, _ = await resolve_session_and_user(token, db)
+            session, user = await resolve_session_and_user(token, db)
         except UnauthorizedException:
             logger.warning(f"WebSocket auth failed for execution {execution_id}")
             await websocket.close(code=4001)
             return
         session_id = session.id
+
+        # A live session proves identity, not the right to watch. The caller must
+        # belong to the workspace the execution ran in, and the execution must exist.
+        execution = (
+            await db.execute(select(Execution).where(Execution.id == execution_id))
+        ).scalar_one_or_none()
+        if execution is None:
+            logger.warning(f"WebSocket rejected — execution {execution_id} not found")
+            await websocket.close(code=4004)
+            return
+        member = (
+            await db.execute(
+                select(WorkspaceMember.user_id).where(
+                    WorkspaceMember.workspace_id == execution.workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if member is None:
+            logger.warning(
+                f"WebSocket rejected — user {user.id} is not a member of workspace "
+                f"{execution.workspace_id} (execution {execution_id})"
+            )
+            await websocket.close(code=4003)
+            return
 
     await manager.connect(websocket, execution_id)
     try:
