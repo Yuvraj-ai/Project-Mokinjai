@@ -61,7 +61,7 @@ export default function ExecutionHistoryPage() {
     <div className="p-8">
       <div className="mb-8 animate-fade-in">
         <h1 className="text-2xl font-semibold text-ink tracking-tight">Execution History</h1>
-        <p className="mt-1 text-sm text-ink-muted">Every workflow and chat run, newest first.</p>
+        <p className="mt-1 text-sm text-ink-muted">Every workflow run, newest first. Agent chats live in the Playground.</p>
       </div>
 
       {executions.length === 0 ? (

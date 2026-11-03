@@ -139,7 +139,10 @@ export default function ThreadPane({
     } finally {
       setSending(false)
       abortRef.current = null
-      onTurnEnded()
+      // Wait for the persisted rows to be refetched before dropping the
+      // in-flight copy, so the turn never renders twice.
+      await Promise.resolve(onTurnEnded())
+      setInflight(null)
     }
   }
 

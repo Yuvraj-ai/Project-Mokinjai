@@ -82,13 +82,23 @@ export default function PlaygroundPage() {
   const selectedAgent = agents.find((agent) => agent.id === agentId) ?? null
   const activeSession = sessions.find((session) => session.id === sessionId) ?? null
 
-  const handleTurnEnded = useCallback(() => {
-    if (workspaceId && agentId) refreshSessions(agentId)
-    if (workspaceId && sessionId) {
-      getSession(workspaceId, sessionId)
-        .then((detail) => setMessages(detail.messages))
-        .catch(() => {})
+  const handleTurnEnded = useCallback(async () => {
+    const jobs: Promise<void>[] = []
+    if (workspaceId && agentId) {
+      jobs.push(
+        listSessions(workspaceId, agentId)
+          .then(setSessions)
+          .catch(() => {})
+      )
     }
+    if (workspaceId && sessionId) {
+      jobs.push(
+        getSession(workspaceId, sessionId)
+          .then((detail) => setMessages(detail.messages))
+          .catch(() => {})
+      )
+    }
+    await Promise.all(jobs)
   }, [workspaceId, agentId, sessionId, refreshSessions])
 
   const handleCreate = async () => {
