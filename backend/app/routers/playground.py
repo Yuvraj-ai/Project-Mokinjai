@@ -6,6 +6,7 @@ Reads are viewer, writes are editor; a session in another workspace is a 404,
 never a 403 leak.
 """
 
+import asyncio
 import json
 from datetime import datetime, timezone
 
@@ -37,11 +38,53 @@ router = APIRouter()
 
 _SESSION_LIST_CAP = 200
 
+# Idle SSE streams emit a comment ping at this cadence. The ping is load
+# bearing twice over: uvicorn only notices a gone client when a write fails,
+# so a hung turn (unreachable MCP server, stuck tool) with nothing to say
+# used to sit "running" forever, and proxies quietly buffer quiet streams.
+_SSE_PING_SECONDS = 15.0
+
 
 def _sse(events):
+    """SSE frames from the runtime's event dicts, with idle pings.
+
+    A pump task iterates the runtime generator into a queue so the frame loop
+    can wait with a timeout; closing the frame generator cancels the pump,
+    whose cancellation propagates into the runtime generator's own cleanup
+    (finalizing the assistant message as stopped)."""
     async def generate():
-        async for event in events:
-            yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def pump():
+            try:
+                async for event in events:
+                    await queue.put(event)
+            except BaseException as exc:
+                await queue.put(exc)
+            else:
+                await queue.put(None)
+
+        task = asyncio.create_task(pump())
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(), timeout=_SSE_PING_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    continue
+                if item is None:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                yield f"event: {item['event']}\ndata: {json.dumps(item['data'])}\n\n"
+        finally:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
 
     return generate()
 

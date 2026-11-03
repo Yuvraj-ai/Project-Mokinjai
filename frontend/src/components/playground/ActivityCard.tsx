@@ -37,11 +37,22 @@ function filesLabel(event: ActivityEvent): string {
   return `Staged ${names.length > 3 ? `${shown} +${names.length - 3}` : shown}`
 }
 
+const START_FORM: Record<string, string> = {
+  Called: 'Calling',
+  Queried: 'Querying',
+  Ran: 'Running',
+  Read: 'Reading',
+  Searched: 'Searching',
+  Staged: 'Staging',
+}
+
 function describe(event: ActivityEvent): string {
   if (event.type === 'files_staged') return filesLabel(event)
   const meta = KIND_META[event.kind ?? 'tool'] ?? KIND_META.tool
-  const verb = event.type === 'tool_end' ? 'Called' : 'Calling'
-  return `${verb} — ${meta.label(event)}`
+  const label = meta.label(event)
+  if (event.type === 'tool_end') return label
+  // tool_start: same label, in-progress verb ("Called get_time" → "Calling get_time").
+  return label.replace(/^\w+/, (verb) => START_FORM[verb] ?? verb)
 }
 
 function bodyOf(event: ActivityEvent): string | null {
@@ -54,6 +65,7 @@ function bodyOf(event: ActivityEvent): string | null {
       return String(value)
     }
   }
+  if (event.error) return String(event.error)
   if (event.type === 'files_staged') return pick(event.names)
   return pick(event.type === 'tool_start' ? event.args : event.result)
 }
@@ -80,7 +92,7 @@ export default function ActivityCard({ event }: { event: ActivityEvent }) {
         ) : (
           <ChevronRight className="h-3 w-3 shrink-0" aria-hidden />
         )}
-        <Icon className="h-3 w-3 shrink-0" aria-hidden />
+        <Icon className={`h-3 w-3 shrink-0 ${event.error ? 'text-status-error' : ''}`} aria-hidden />
         <span className="min-w-0 flex-1 truncate font-mono">{describe(event)}</span>
         {event.duration_ms != null && (
           <span className="shrink-0 tabular-nums">{(event.duration_ms / 1000).toFixed(1)}s</span>

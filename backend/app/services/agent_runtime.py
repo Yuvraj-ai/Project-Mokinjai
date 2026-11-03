@@ -561,6 +561,23 @@ async def _delete_assistant_message(assistant_message_id: str) -> None:
             await db.commit()
 
 
+async def _flush_activity(assistant_message_id: str, activity: list[dict]) -> None:
+    """Persist the activity seen so far, without touching status/content.
+
+    A turn that hangs mid-tool-call (an unreachable MCP server, a stuck
+    sandbox) used to lose everything the user had already watched stream,
+    because activity was only written when the turn finished. Flushing as
+    events arrive keeps the replay truthful even for a turn that never
+    completes. Throttled by the caller."""
+    if assistant_message_id is None:
+        return
+    async with async_session() as db:
+        row = await db.get(ChatMessage, assistant_message_id)
+        if row is not None:
+            row.activity = list(activity) or None
+            await db.commit()
+
+
 async def stream_turn(
     workspace_id: str,
     session_id: str,
@@ -673,6 +690,7 @@ async def stream_turn(
         if filenames:
             staged_event: dict[str, Any] = {"type": "files_staged", "names": list(filenames)}
             _remember(staged_event)
+            await _flush_activity(assistant_message_id, activity)
             yield {"event": "activity", "data": staged_event}
 
         history = [
@@ -686,6 +704,7 @@ async def stream_turn(
         streamed = False
         final_text = ""
         structured: Any = None
+        last_flush = 0.0
 
         async for event in graph.astream_events({"messages": history}, version="v2"):
             kind = event["event"]
@@ -721,6 +740,9 @@ async def stream_turn(
                     "args": _cap(event["data"].get("input") or {}),
                 }
                 _remember(entry)
+                if time.monotonic() - last_flush > 1.0:
+                    last_flush = time.monotonic()
+                    await _flush_activity(assistant_message_id, activity)
                 yield {"event": "activity", "data": entry}
 
             elif kind == "on_tool_end" and not nested:
@@ -739,6 +761,28 @@ async def stream_turn(
                     "duration_ms": duration_ms,
                 }
                 _remember(entry)
+                await _flush_activity(assistant_message_id, activity)
+                yield {"event": "activity", "data": entry}
+
+            elif kind == "on_tool_error" and not nested:
+                # LangGraph emits this instead of on_tool_end when the tool
+                # raises; without it the card would say "Calling…" forever.
+                run_id = str(event.get("run_id") or event.get("name", ""))
+                name = event.get("name", "")
+                started_at = tool_started.pop(run_id, None)
+                duration_ms = (
+                    int((time.monotonic() - started_at) * 1000) if started_at else None
+                )
+                entry = {
+                    "type": "tool_end",
+                    "id": run_id,
+                    "name": name,
+                    "kind": _tool_kind(name),
+                    "error": _cap(str(event["data"].get("error") or "the tool failed")),
+                    "duration_ms": duration_ms,
+                }
+                _remember(entry)
+                await _flush_activity(assistant_message_id, activity)
                 yield {"event": "activity", "data": entry}
 
             elif (

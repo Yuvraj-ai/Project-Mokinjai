@@ -10,9 +10,13 @@ export function useAuth() {
     if (isAuthenticated && !user) {
       getMe()
         .then(setUser)
-        // The session is already dead here — a server-side logout POST would
-        // just 401. Clear locally and let the router land on /login.
-        .catch(() => forceSignOut())
+        .catch((caught) => {
+          // Only a real auth failure ends the session — a network blip or a
+          // restarting backend must not log the user out.
+          if ((caught as { response?: { status?: number } })?.response?.status === 401) {
+            forceSignOut()
+          }
+        })
     }
   }, [isAuthenticated, user, setUser, logout, forceSignOut])
 

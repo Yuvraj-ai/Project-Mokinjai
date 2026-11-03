@@ -510,6 +510,137 @@ class TestStreamTurn:
         assert prompts_seen == ["Be brief.", "New instructions."]
 
     @pytest.mark.asyncio
+    async def test_activity_is_persisted_before_the_turn_completes(
+        self, db_session, session_factory, test_workspace, monkeypatch, encryption_key
+    ):
+        """A hung turn must not lose what the user already saw: each activity
+        event lands in the assistant row as it streams, not only at the end."""
+        agent, chat_session, execution = await _setup(db_session, test_workspace)
+
+        class SlowAfterToolGraph:
+            async def astream_events(self, payload, version):
+                yield {
+                    "event": "on_tool_start",
+                    "run_id": "r1",
+                    "name": "execute_python",
+                    "metadata": {},
+                    "data": {"input": {"code": "1 + 1"}},
+                }
+                # Simulate the tool/model hanging after the event streamed.
+                await asyncio.sleep(3600)
+
+        _install(monkeypatch, session_factory, SlowAfterToolGraph())
+
+        gen = stream_turn(test_workspace.id, chat_session.id, "hi", execution.id)
+        async for event in gen:
+            if event["event"] == "activity":
+                break
+
+        async with session_factory() as check:
+            row = (
+                (
+                    await check.execute(
+                        select(ChatMessage).where(
+                            ChatMessage.session_id == chat_session.id,
+                            ChatMessage.role == "assistant",
+                        )
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            assert row.activity is not None
+            assert row.activity[0]["name"] == "execute_python"
+
+        await gen.aclose()
+
+    @pytest.mark.asyncio
+    async def test_abort_persists_the_seen_activity(
+        self, db_session, session_factory, test_workspace, monkeypatch, encryption_key
+    ):
+        agent, chat_session, execution = await _setup(db_session, test_workspace)
+
+        class ToolThenHangGraph:
+            async def astream_events(self, payload, version):
+                yield {
+                    "event": "on_tool_start",
+                    "run_id": "r1",
+                    "name": "read_skill",
+                    "metadata": {},
+                    "data": {"input": {"name": "s"}},
+                }
+                await asyncio.sleep(3600)
+
+        _install(monkeypatch, session_factory, ToolThenHangGraph())
+
+        gen = stream_turn(test_workspace.id, chat_session.id, "hi", execution.id)
+        async for event in gen:
+            if event["event"] == "activity":
+                break
+        await gen.aclose()
+
+        async with session_factory() as check:
+            row = (
+                (
+                    await check.execute(
+                        select(ChatMessage).where(
+                            ChatMessage.session_id == chat_session.id,
+                            ChatMessage.role == "assistant",
+                        )
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            assert row.status == "stopped"
+            assert row.activity and row.activity[0]["name"] == "read_skill"
+            run_row = await check.get(Execution, execution.id)
+            assert run_row.status == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_tool_error_becomes_a_completed_card(
+        self, db_session, session_factory, test_workspace, monkeypatch, encryption_key
+    ):
+        """LangGraph emits on_tool_error instead of on_tool_end when a tool
+        raises; without handling it the card stays 'Calling…' forever."""
+        agent, chat_session, execution = await _setup(db_session, test_workspace)
+
+        class FailingToolGraph:
+            async def astream_events(self, payload, version):
+                yield {
+                    "event": "on_tool_start",
+                    "run_id": "r1",
+                    "name": "get_time",
+                    "metadata": {},
+                    "data": {"input": {"tz": "local"}},
+                }
+                yield {
+                    "event": "on_tool_error",
+                    "run_id": "r1",
+                    "name": "get_time",
+                    "metadata": {},
+                    "data": {"error": "tz: Field required"},
+                }
+                yield {
+                    "event": "on_chain_end",
+                    "name": "LangGraph",
+                    "parent_ids": [],
+                    "metadata": {},
+                    "data": {"output": {"messages": [AIMessage(content="sorry")]}},
+                }
+
+        _install(monkeypatch, session_factory, FailingToolGraph())
+        events = [
+            event
+            async for event in stream_turn(
+                test_workspace.id, chat_session.id, "hi", execution.id
+            )
+        ]
+        activities = [e["data"] for e in events if e["event"] == "activity"]
+        assert [a["type"] for a in activities] == ["tool_start", "tool_end"]
+        assert "Field required" in activities[1]["error"]
+
+    @pytest.mark.asyncio
     async def test_event_count_cap(
         self, db_session, session_factory, test_workspace, monkeypatch, encryption_key
     ):

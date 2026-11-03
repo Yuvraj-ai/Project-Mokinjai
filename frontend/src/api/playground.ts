@@ -23,6 +23,7 @@ export interface ActivityEvent {
   kind?: 'sql' | 'code' | 'skill' | 'mcp' | 'web' | 'subagent' | 'tool'
   args?: unknown
   result?: unknown
+  error?: string
   duration_ms?: number | null
   names?: string[]
 }
