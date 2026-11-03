@@ -497,59 +497,6 @@ async def test_a_prompt_can_be_the_recorded_source(
 
 
 @pytest.mark.asyncio
-async def test_chat_streams_sse_and_records_a_chat_execution(
-    client, test_workspace, auth_headers, profile, db_session, monkeypatch
-):
-    created = await client.post(
-        url(test_workspace.id), json=payload(profile.id), headers=auth_headers
-    )
-    agent_id = created.json()["id"]
-
-    async def fake_stream(workspace_id, streamed_agent_id, messages, execution_id):
-        yield {"event": "token", "data": {"delta": "Hi"}}
-        yield {
-            "event": "done",
-            "data": {"execution_id": execution_id, "usage": {}, "cost_usd": 0.0},
-        }
-
-    monkeypatch.setattr("app.routers.agents.stream_chat", fake_stream)
-
-    response = await client.post(
-        f"{url(test_workspace.id)}/{agent_id}/chat",
-        json={"messages": [{"role": "user", "content": "hello"}]},
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    assert "event: token" in response.text
-    assert '"delta": "Hi"' in response.text
-    assert "event: done" in response.text
-
-    executions = (
-        await db_session.execute(select(Execution).where(Execution.agent_id == agent_id))
-    ).scalars().all()
-    assert len(executions) == 1
-    assert executions[0].trigger_type == "chat"
-    assert executions[0].input_data["messages"][0]["content"] == "hello"
-
-
-@pytest.mark.asyncio
-async def test_chat_rejects_an_empty_conversation(
-    client, test_workspace, auth_headers, profile
-):
-    created = await client.post(
-        url(test_workspace.id), json=payload(profile.id), headers=auth_headers
-    )
-    response = await client.post(
-        f"{url(test_workspace.id)}/{created.json()['id']}/chat",
-        json={"messages": []},
-        headers=auth_headers,
-    )
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
 async def test_options_expose_skill_references_for_the_picker(
     client, test_workspace, auth_headers, profile, db_session
 ):

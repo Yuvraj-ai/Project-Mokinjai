@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChatSessionCreate(BaseModel):
@@ -50,3 +50,10 @@ class ChatSessionDetailResponse(ChatSessionResponse):
 
 class PlaygroundChatRequest(BaseModel):
     content: str = Field(min_length=1)
+
+    @field_validator("content")
+    @classmethod
+    def content_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("the message cannot be empty")
+        return value

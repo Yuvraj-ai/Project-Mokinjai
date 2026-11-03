@@ -84,6 +84,11 @@ async def list_executions(
     query = select(Execution).where(Execution.workspace_id == workspace_id)
     count_query = select(func.count()).select_from(Execution).where(Execution.workspace_id == workspace_id)
 
+    # Agent chat runs live in the Playground now; this list is workflow history.
+    # (spec 2026-11-03-playground P9 — closes ROADMAP §6.4)
+    query = query.where(Execution.workflow_id.isnot(None))
+    count_query = count_query.where(Execution.workflow_id.isnot(None))
+
     if workflow_id:
         query = query.where(Execution.workflow_id == workflow_id)
         count_query = count_query.where(Execution.workflow_id == workflow_id)

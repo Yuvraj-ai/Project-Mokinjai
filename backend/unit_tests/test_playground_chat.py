@@ -555,3 +555,99 @@ class TestStreamTurn:
                 .one()
             )
             assert len(row.activity) <= 200
+
+
+class TestChatEndpoint:
+    @pytest.mark.asyncio
+    async def test_chat_endpoint_streams_and_requires_editor(
+        self, client, auth_headers, viewer_headers, test_workspace, db_session
+    ):
+        agent, chat_session, _ = await _setup(db_session, test_workspace)
+
+        async def fake_stream(workspace_id, session_id, content, execution_id):
+            yield {"event": "token", "data": {"delta": "Hi"}}
+            yield {"event": "done", "data": {"usage": {}, "cost_usd": 0.0, "status": "completed"}}
+
+        monkeypatch_target = "app.routers.playground.stream_turn"
+        import app.routers.playground as playground_router
+
+        original = playground_router.stream_turn
+        playground_router.stream_turn = fake_stream
+        try:
+            url = f"/api/workspaces/{test_workspace.id}/playground/sessions/{chat_session.id}/chat"
+            ok = await client.post(url, json={"content": "hello"}, headers=auth_headers)
+            assert ok.status_code == 200
+            assert ok.headers["content-type"].startswith("text/event-stream")
+            assert "event: token" in ok.text
+            assert '"delta": "Hi"' in ok.text
+
+            denied = await client.post(
+                url, json={"content": "hello"}, headers=viewer_headers
+            )
+            assert denied.status_code == 403
+        finally:
+            playground_router.stream_turn = original
+
+    @pytest.mark.asyncio
+    async def test_chat_endpoint_scopes_session(
+        self, client, auth_headers, test_workspace, test_user, db_session
+    ):
+        from app.models.workspace import Workspace
+
+        agent, chat_session, _ = await _setup(db_session, test_workspace)
+        other_ws = Workspace(name="Elsewhere", owner_id=test_user.id)
+        db_session.add(other_ws)
+        await db_session.commit()
+
+        base = f"/api/workspaces/{other_ws.id}/playground/sessions"
+        missing = await client.post(
+            f"{base}/{chat_session.id}/chat", json={"content": "hi"}, headers=auth_headers
+        )
+        assert missing.status_code == 404
+
+        empty = await client.post(
+            f"/api/workspaces/{test_workspace.id}/playground/sessions/{chat_session.id}/chat",
+            json={"content": "   "},
+            headers=auth_headers,
+        )
+        assert empty.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_executions_list_hides_chat_runs(
+        self, client, auth_headers, test_workspace, db_session
+    ):
+        from app.models.workflow import Workflow
+
+        workflow = Workflow(
+            workspace_id=test_workspace.id,
+            name="W",
+            created_by=test_workspace.owner_id,
+            flow_definition={"nodes": [], "edges": []},
+        )
+        db_session.add(workflow)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                Execution(
+                    workspace_id=test_workspace.id,
+                    workflow_id=workflow.id,
+                    status="completed",
+                    trigger_type="manual",
+                ),
+                Execution(
+                    workspace_id=test_workspace.id,
+                    agent_id=None,
+                    status="completed",
+                    trigger_type="chat",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/workspaces/{test_workspace.id}/executions", headers=auth_headers
+        )
+        assert response.status_code == 200
+        items = response.json() if isinstance(response.json(), list) else response.json().get("executions", [])
+        assert all(item.get("workflow_id") is not None for item in items)
+        assert len(items) == 1

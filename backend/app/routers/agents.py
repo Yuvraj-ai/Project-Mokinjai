@@ -1,8 +1,6 @@
-import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +33,6 @@ from app.schemas.agent import (
     AgentDataSourceItem,
     AgentDocumentItem,
     AgentCapabilitiesResponse,
-    AgentChatRequest,
     AgentListItem,
     AgentListResponse,
     AgentOption,
@@ -59,7 +56,6 @@ from app.services.agent_composition import (
 )
 from app.services.agent_dependencies import effective_tool_names, resolve_skills
 from app.services.agent_validation import AgentValidationError, normalise_params
-from app.services.agent_runtime import stream_chat
 from app.services.skill import SkillDefinition, SkillError, extract_references
 from app.services.structured_output import (
     Definition,
@@ -70,14 +66,6 @@ from app.services.tool_schema import extract_schema, extraction_error
 from app.utils.errors import ConflictException, NotFoundException
 
 router = APIRouter()
-
-
-def _sse(events):
-    async def generate():
-        async for event in events:
-            yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
-
-    return generate()
 
 
 def _input(request: AgentWriteRequest) -> AgentInput:
@@ -709,36 +697,3 @@ async def delete_agent(
     await db.delete(agent)
     await db.commit()
     return {"success": True}
-
-
-@router.post("/{agent_id}/chat")
-async def chat_with_agent(
-    workspace_id: str,
-    agent_id: str,
-    request: AgentChatRequest,
-    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
-    db: AsyncSession = Depends(get_db),
-):
-    await _load_agent(db, workspace_id, agent_id)
-    messages = [message.model_dump() for message in request.messages]
-    execution = Execution(
-        workspace_id=workspace_id,
-        agent_id=agent_id,
-        status="running",
-        trigger_type="chat",
-        input_data={"messages": messages},
-        started_at=datetime.now(timezone.utc),
-    )
-    db.add(execution)
-    await db.commit()
-    await db.refresh(execution)
-
-    return StreamingResponse(
-        _sse(stream_chat(workspace_id, agent_id, messages, execution.id)),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )

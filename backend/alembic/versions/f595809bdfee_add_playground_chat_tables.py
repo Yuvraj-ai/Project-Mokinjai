@@ -36,7 +36,7 @@ def upgrade() -> None:
             sa.ForeignKey('agents.id', ondelete='CASCADE'),
             nullable=False,
         ),
-        sa.Column('title', sa.String(255), nullable=False, server_default='New session'),
+        sa.Column('title', sa.String(255), nullable=False),
         sa.Column(
             'created_by',
             sa.String(36),
@@ -80,7 +80,7 @@ def upgrade() -> None:
             nullable=False,
             unique=True,
         ),
-        sa.Column('content', sa.Text(), nullable=False, server_default=''),
+        sa.Column('content', sa.Text(), nullable=False),
         sa.Column('reasoning', sa.Text(), nullable=True),
         sa.Column('activity', JSONB(), nullable=True),
         sa.Column('structured', JSONB(), nullable=True),

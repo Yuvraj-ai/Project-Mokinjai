@@ -6,7 +6,11 @@ Reads are viewer, writes are editor; a session in another workspace is a 404,
 never a 403 leak.
 """
 
+import json
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +19,7 @@ from app.logging import logger
 from app.middleware.rbac import require_workspace_role
 from app.models.agent import Agent
 from app.models.chat import ChatMessage, ChatSession
+from app.models.execution import Execution
 from app.models.workspace import WorkspaceMember
 from app.schemas.playground import (
     ChatSessionCreate,
@@ -23,12 +28,60 @@ from app.schemas.playground import (
     ChatSessionResponse,
     ChatSessionUpdate,
     ChatMessageResponse,
+    PlaygroundChatRequest,
 )
+from app.services.agent_runtime import stream_turn
 from app.utils.errors import BadRequestException, NotFoundException
 
 router = APIRouter()
 
 _SESSION_LIST_CAP = 200
+
+
+def _sse(events):
+    async def generate():
+        async for event in events:
+            yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+
+    return generate()
+
+
+@router.post("/sessions/{session_id}/chat")
+async def chat_in_session(
+    workspace_id: str,
+    session_id: str,
+    request: PlaygroundChatRequest,
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """One playground turn. The client sends only the new message — history is
+    server-owned. Each turn records one Execution (trigger_type=chat)."""
+    chat_session = await _load_session(db, workspace_id, session_id)
+    execution = Execution(
+        workspace_id=workspace_id,
+        agent_id=chat_session.agent_id,
+        status="running",
+        trigger_type="chat",
+        input_data={"content": request.content},
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(execution)
+    await db.commit()
+    await db.refresh(execution)
+
+    return StreamingResponse(
+        _sse(
+            stream_turn(
+                workspace_id, chat_session.id, request.content, execution.id
+            )
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _to_response(row: ChatSession) -> ChatSessionResponse:
