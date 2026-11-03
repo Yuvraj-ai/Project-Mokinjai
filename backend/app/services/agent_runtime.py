@@ -638,6 +638,10 @@ async def stream_turn(
             if chat_session.title == "New session":
                 first_line = content.split("\n", 1)[0].strip()
                 chat_session.title = first_line[:60] or "New session"
+            # Every turn must bump the session or the list (ordered by
+            # updated_at) freezes at the first turn: on later turns no other
+            # session attribute changes, so onupdate alone never fires.
+            chat_session.updated_at = datetime.now(timezone.utc)
             await db.commit()
             await db.refresh(user_row)
             await db.refresh(assistant_row)

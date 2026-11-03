@@ -271,10 +271,18 @@ class TestStreamTurn:
         ):
             pass
 
+        async with session_factory() as check:
+            stamp_after_first = (await check.get(ChatSession, chat_session.id)).updated_at
+
         async for _ in stream_turn(
             test_workspace.id, chat_session.id, "again", execution.id
         ):
             pass
+
+        async with session_factory() as check:
+            session_row = await check.get(ChatSession, chat_session.id)
+            # The session list orders by updated_at; every turn must bump it.
+            assert session_row.updated_at > stamp_after_first
 
         history = graph.payloads[1]["messages"]
         assert [type(m).__name__ for m in history] == [
@@ -611,6 +619,13 @@ class TestChatEndpoint:
             headers=auth_headers,
         )
         assert empty.status_code == 422
+
+        oversized = await client.post(
+            f"/api/workspaces/{test_workspace.id}/playground/sessions/{chat_session.id}/chat",
+            json={"content": "x" * 32_001},
+            headers=auth_headers,
+        )
+        assert oversized.status_code == 422
 
     @pytest.mark.asyncio
     async def test_executions_list_hides_chat_runs(

@@ -49,7 +49,8 @@ class ChatSessionDetailResponse(ChatSessionResponse):
 
 
 class PlaygroundChatRequest(BaseModel):
-    content: str = Field(min_length=1)
+    # The same 32 000-char bound the old agents chat path enforced.
+    content: str = Field(min_length=1, max_length=32_000)
 
     @field_validator("content")
     @classmethod
