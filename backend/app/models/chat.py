@@ -9,11 +9,18 @@ so a replayed session renders exactly as the live one did.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Numeric, Sequence, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+
+# Global monotonic tiebreak for message ordering (plan Task 3's replay contract).
+# `created_at` cannot order rows inserted in one transaction — Postgres `now()` is
+# transaction-scoped, so a turn's user and assistant rows share a timestamp — and
+# the uuid4 PK does not order. The sequence is global, not per-session, which is
+# fine: within one session its values are still strictly increasing by insert.
+CHAT_MESSAGE_SEQ = Sequence("chat_messages_seq_seq", metadata=Base.metadata)
 
 
 class ChatSession(Base):
@@ -56,6 +63,9 @@ class ChatMessage(Base):
         String(36), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     role: Mapped[str] = mapped_column(String(16), nullable=False)
+    seq: Mapped[int] = mapped_column(
+        BigInteger, CHAT_MESSAGE_SEQ, nullable=False, unique=True
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     activity: Mapped[list | None] = mapped_column(JSONB, nullable=True)

@@ -20,6 +20,7 @@ depends_on: Union[str, Sequence[str]] = None
 
 
 def upgrade() -> None:
+    op.execute("CREATE SEQUENCE IF NOT EXISTS chat_messages_seq_seq")
     op.create_table(
         'chat_sessions',
         sa.Column('id', sa.String(36), primary_key=True),
@@ -72,6 +73,13 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column('role', sa.String(16), nullable=False),
+        sa.Column(
+            'seq',
+            sa.BigInteger(),
+            sa.Sequence('chat_messages_seq_seq'),
+            nullable=False,
+            unique=True,
+        ),
         sa.Column('content', sa.Text(), nullable=False, server_default=''),
         sa.Column('reasoning', sa.Text(), nullable=True),
         sa.Column('activity', JSONB(), nullable=True),
@@ -102,6 +110,7 @@ def downgrade() -> None:
     op.drop_index('ix_chat_messages_session_created', table_name='chat_messages')
     op.drop_index('ix_chat_messages_session_id', table_name='chat_messages')
     op.drop_table('chat_messages')
+    op.execute("DROP SEQUENCE IF EXISTS chat_messages_seq_seq")
     op.drop_index('ix_chat_sessions_workspace_updated', table_name='chat_sessions')
     op.drop_index('ix_chat_sessions_agent_id', table_name='chat_sessions')
     op.drop_table('chat_sessions')
