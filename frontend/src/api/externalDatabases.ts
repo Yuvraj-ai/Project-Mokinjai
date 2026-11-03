@@ -58,3 +58,30 @@ export async function deleteExternalDatabase(
 ): Promise<void> {
   await apiClient.delete(`${databasesUrl(workspaceId)}/${connectionId}`)
 }
+
+export interface ConnectionColumnSchema {
+  name: string
+  type: string
+  nullable: boolean
+}
+
+export interface ConnectionTableSchema {
+  schema: string
+  name: string
+  columns: ConnectionColumnSchema[]
+}
+
+export interface ConnectionSchema {
+  tables: ConnectionTableSchema[]
+  fetched_at: string
+}
+
+export async function getConnectionSchema(
+  workspaceId: string,
+  connectionId: string
+): Promise<ConnectionSchema> {
+  const response = await apiClient.get<ConnectionSchema>(
+    `${databasesUrl(workspaceId)}/${connectionId}/schema`
+  )
+  return response.data
+}

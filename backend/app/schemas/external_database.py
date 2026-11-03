@@ -40,3 +40,20 @@ class ExternalDatabaseResponse(BaseModel):
 class ExternalDatabaseListResponse(BaseModel):
     connections: list[ExternalDatabaseResponse]
     total: int
+
+
+class ColumnSchema(BaseModel):
+    name: str
+    type: str
+    nullable: bool
+
+
+class TableSchema(BaseModel):
+    schema: str
+    name: str
+    columns: list[ColumnSchema] = []
+
+
+class ConnectionSchemaResponse(BaseModel):
+    tables: list[TableSchema]
+    fetched_at: datetime

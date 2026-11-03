@@ -4,14 +4,17 @@ The URI is a credential: encrypted at rest and never returned. A record is not a
 connection — creating one contacts nothing, and no driver is imported for any kind.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crypto import encrypt_api_key
+from app.crypto import decrypt_api_key, encrypt_api_key
 from app.database import get_db
 from app.logging import logger
 from app.middleware.rbac import require_workspace_role
+from app.models.agent import Agent, AgentDataSource
 from app.models.external_database import KINDS, ExternalDatabaseConnection
 from app.models.workspace import WorkspaceMember
 from app.schemas.external_database import (
@@ -20,7 +23,17 @@ from app.schemas.external_database import (
     ExternalDatabaseResponse,
     ExternalDatabaseUpdate,
 )
-from app.utils.errors import BadRequestException, NotFoundException
+from app.services.data_sources import schema_cache
+from app.services.data_sources.postgres import DataSourceError, describe
+from app.services.data_sources.postgres import describe
+from app.services.data_sources.ssrf import BlockedHostError, assert_dial_allowed
+from app.schemas.external_database import ConnectionSchemaResponse
+from app.utils.errors import (
+    AppException,
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+)
 
 router = APIRouter()
 
@@ -197,8 +210,59 @@ async def update_external_database(
 
     await db.commit()
     await db.refresh(row)
+    schema_cache.invalidate(row.id)
     logger.info(f"External database connection {row.id} updated")
     return _to_response(row)
+
+
+
+
+@router.get("/{connection_id}/schema", response_model=ConnectionSchemaResponse)
+async def get_connection_schema(
+    workspace_id: str,
+    connection_id: str,
+    _member: WorkspaceMember = Depends(require_workspace_role("editor")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Live table/column list for the agent table picker and Check connection.
+
+    One dial per call, cached for 60s; the same endpoint is the second call
+    site for the Check-connection button (D6). The URI never appears in any
+    response or error.
+    """
+    row = await _load(db, workspace_id, connection_id)
+
+    cached = schema_cache.get(row.id)
+    if cached is not None:
+        return cached
+
+    uri = decrypt_api_key(row.encrypted_uri)
+    try:
+        assert_dial_allowed(uri)
+    except BlockedHostError as exc:
+        raise BadRequestException(str(exc)) from exc
+
+    try:
+        tables = await describe(uri)
+    except DataSourceError as exc:
+        raise AppException(status_code=502, detail=str(exc)) from exc
+
+    payload = {
+        "tables": [
+            {
+                "schema": table.schema,
+                "name": table.name,
+                "columns": [
+                    {"name": c.name, "type": c.type, "nullable": c.nullable}
+                    for c in table.columns
+                ],
+            }
+            for table in tables
+        ],
+        "fetched_at": datetime.now(timezone.utc),
+    }
+    schema_cache.set(row.id, payload)
+    return payload
 
 
 @router.delete("/{connection_id}")
@@ -209,6 +273,29 @@ async def delete_external_database(
     db: AsyncSession = Depends(get_db),
 ):
     row = await _load(db, workspace_id, connection_id)
+
+    # D4: a connection attached to an agent is never cascade-deleted. Detach first.
+    attached = (
+        (
+            await db.execute(
+                select(Agent.name)
+                .join(AgentDataSource, AgentDataSource.agent_id == Agent.id)
+                .where(
+                    AgentDataSource.connection_id == connection_id,
+                    Agent.workspace_id == workspace_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if attached:
+        raise ConflictException(
+            "This connection is attached to agents: "
+            + ", ".join(sorted(attached))
+            + ". Detach it from those agents first."
+        )
+
     await db.delete(row)
     await db.commit()
     logger.info(f"External database connection {connection_id} deleted")

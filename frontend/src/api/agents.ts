@@ -117,8 +117,21 @@ export interface AgentInput {
   folders: AgentFolderRule[]
   /** Loose file ids attached outside any folder rule. */
   documents: string[]
+  /** Attached connections with their per-agent table allowlist (snapshot). */
+  data_sources: AgentDataSourceRule[]
   connector_ids: string[]
   subagent_ids: string[]
+}
+
+export interface AgentDataSourceRule {
+  id: string
+  tables: string[]
+}
+
+export interface AgentDataSourceItem {
+  id: string
+  name: string
+  tables: string[]
 }
 
 export type AgentStatus = 'ready' | 'needs_attention'
@@ -132,6 +145,7 @@ export interface Agent extends Omit<AgentInput, 'documents'> {
   status: AgentStatus
   issues: string[]
   documents: AgentDocumentItem[]
+  data_sources: AgentDataSourceItem[]
   created_at: string
   updated_at: string
 }

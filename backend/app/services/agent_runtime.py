@@ -46,6 +46,8 @@ from app.services.agent_composition import (
 )
 from app.services.agent_dependencies import DEFAULT_MAX_SUBAGENT_DEPTH
 from app.services.agent_tools import (
+    describe_data_source_tool,
+    query_data_source_tool,
     read_skill_tool,
     sandbox_python_tool,
     subagent_tool,
@@ -146,6 +148,10 @@ async def build_tools(
                 )
             )
 
+    for item in validated.data_sources:
+        tools.append(query_data_source_tool(item.connection, item.tables, validated.agent_id))
+        tools.append(describe_data_source_tool(item.connection, item.tables))
+
     if validated.selected_skills:
         tools.append(read_skill_tool(validated.resolved_skills))
 
@@ -226,16 +232,29 @@ def build_graph(
 
 
 def _system_prompt(prompt: str, validated: ValidatedAgent) -> str:
+    sections: list[str] = []
     menu = validated.resolved_skills.menu
-    if not menu:
+    if menu:
+        lines = "\n".join(entry.line() for entry in menu)
+        sections.append(
+            "The following skills are available. When a task matches one, call "
+            f"read_skill with its name and follow the returned instructions.\n{lines}"
+        )
+    if validated.data_sources:
+        lines = "\n".join(
+            f"- {item.connection.name} (connection_id: {item.connection.id}); "
+            f"queryable tables: {', '.join(item.tables)}"
+            for item in validated.data_sources
+        )
+        sections.append(
+            "External data sources are attached. To read from them, call "
+            "query_data_source with the connection_id and a single read-only "
+            "SELECT limited to the listed tables; call describe_data_source to "
+            f"discover columns.\n{lines}"
+        )
+    if not sections:
         return prompt
-    lines = "\n".join(entry.line() for entry in menu)
-    return (
-        f"{prompt}\n\n"
-        "The following skills are available. When a task matches one, call "
-        "read_skill with its name and follow the returned instructions.\n"
-        f"{lines}"
-    )
+    return prompt + "\n\n" + "\n\n".join(sections)
 
 
 def _graph_name(agent: Agent) -> str:

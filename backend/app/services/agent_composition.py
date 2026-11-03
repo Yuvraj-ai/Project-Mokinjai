@@ -25,6 +25,7 @@ from app.models.agent import (
     AgentTool,
 )
 from app.models.connector import ConnectorInstance
+from app.models.external_database import ExternalDatabaseConnection
 from app.models.knowledge import Document, FileFolder
 from app.models.llm_profile import LlmProfile
 from app.models.prompt import PromptTemplate
@@ -69,6 +70,22 @@ class FolderRule:
 
 
 @dataclass(frozen=True)
+class DataSourceRule:
+    """One attachment from the payload, before validation."""
+
+    id: str
+    tables: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ValidatedDataSource:
+    """An attachment whose connection exists, is queryable, and names tables."""
+
+    connection: "ExternalDatabaseConnection"
+    tables: list[str]
+
+
+@dataclass(frozen=True)
 class AgentInput:
     name: str
     description: str | None
@@ -84,6 +101,7 @@ class AgentInput:
     documents: list[str] = field(default_factory=list)
     connector_ids: list[str] = field(default_factory=list)
     subagent_ids: list[str] = field(default_factory=list)
+    data_sources: list[DataSourceRule] = field(default_factory=list)
 
 
 @dataclass
@@ -103,7 +121,9 @@ class ValidatedAgent:
     attachment_sources: dict[str, str | None]
     connectors: list[ConnectorInstance]
     subagents: list[Agent]
+    data_sources: list[ValidatedDataSource]
     source_prompt: PromptTemplate | None
+    agent_id: str | None = None
 
 
 def _skill_definition(row: Skill) -> SkillDefinition:
@@ -185,6 +205,7 @@ async def validate_agent(
         db, workspace_id, data.folders, data.documents, errors
     )
     connectors = await _load_all(db, ConnectorInstance, workspace_id, data.connector_ids, "connector_ids", errors)
+    data_sources = await _load_data_sources(db, workspace_id, data.data_sources, errors)
     subagents = await _load_subagents(db, workspace_id, data.subagent_ids, agent_id, errors)
     source_prompt = await _load_source_prompt(db, workspace_id, data.source_prompt_id, errors)
 
@@ -213,7 +234,9 @@ async def validate_agent(
         attachment_sources=attachment_sources,
         connectors=connectors,
         subagents=subagents,
+        data_sources=data_sources,
         source_prompt=source_prompt,
+        agent_id=agent_id,
     )
 
 
@@ -533,3 +556,63 @@ async def assert_name_is_free(
         from app.utils.errors import ConflictException
 
         raise ConflictException(f'An agent named "{existing.name}" already exists.')
+
+
+# Kinds with an executor in this backend (D1). Everything else is creatable but
+# cannot be attached to an agent until its executor lands.
+QUERYABLE_KINDS = ("postgres",)
+
+
+async def _load_data_sources(
+    db: AsyncSession, workspace_id: str, rules: list[DataSourceRule], errors: list[FieldError]
+) -> list[ValidatedDataSource]:
+    """Validate the payload attachments: workspace membership, queryable kind,
+    a non-empty table list, no duplicate connections."""
+    if not rules:
+        return []
+
+    seen: set[str] = set()
+    for rule in rules:
+        if rule.id in seen:
+            errors.append(FieldError("data_sources", "attaches the same connection twice"))
+            return []
+        seen.add(rule.id)
+        if not rule.tables or not all(
+            isinstance(name, str) and name.strip() for name in rule.tables
+        ):
+            errors.append(
+                FieldError(
+                    "data_sources", "must name at least one table (detach the connection instead)"
+                )
+            )
+            return []
+
+    rows = (
+        await db.execute(
+            select(ExternalDatabaseConnection).where(
+                ExternalDatabaseConnection.workspace_id == workspace_id,
+                ExternalDatabaseConnection.id.in_([rule.id for rule in rules]),
+            )
+        )
+    ).scalars().all()
+    known = {row.id: row for row in rows}
+
+    for rule in rules:
+        row = known.get(rule.id)
+        if row is None:
+            errors.append(FieldError("data_sources", "does not exist in this workspace"))
+            return []
+        if row.kind not in QUERYABLE_KINDS:
+            errors.append(
+                FieldError(
+                    "data_sources",
+                    f"{row.kind} connections are not queryable yet",
+                )
+            )
+            return []
+
+    by_id = {rule.id: rule for rule in rules}
+    return [
+        ValidatedDataSource(connection=row, tables=by_id[row.id].tables)
+        for row in rows
+    ]

@@ -15,8 +15,13 @@ from typing import Any, Awaitable, Callable
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, create_model
 
+from app.crypto import decrypt_api_key
+from app.models.external_database import ExternalDatabaseConnection
 from app.schemas.tool import ParameterType, ToolSchema
 from app.services.agent_dependencies import ResolvedSkills
+from app.services.data_sources.postgres import DataSourceError, describe, run
+from app.services.data_sources.guard import GuardError
+from app.services.data_sources.ssrf import BlockedHostError, assert_dial_allowed
 from app.services.sandbox.session import SandboxSession
 
 _PYTHON_TYPE: dict[str, Any] = {
@@ -162,3 +167,110 @@ def _annotation(kind: ParameterType, items_type: str | None) -> Any:
 def _subagent_tool_name(name: str, agent_id: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")[:40] or "agent"
     return f"ask_{slug}_{agent_id[:4]}"
+
+
+# ---------------------------------------------------------------------------
+# External data sources (D2, D4, D6): host-side, in-process tools. The Docker
+# sandbox never sees a URI — these run where the credentials already live.
+
+QUERY_DATA_SOURCE = "query_data_source"
+DESCRIBE_DATA_SOURCE = "describe_data_source"
+
+
+class _QueryDataSourceInput(BaseModel):
+    connection_id: str = Field(description="The connection_id of the data source to query.")
+    sql: str = Field(
+        description="A single read-only SELECT statement. Only the tables listed for this "
+        "data source may appear in the query."
+    )
+
+
+class _DescribeDataSourceInput(BaseModel):
+    connection_id: str = Field(description="The connection_id of the data source to describe.")
+
+
+def query_data_source_tool(
+    connection: "ExternalDatabaseConnection", tables: list[str], agent_id: str | None = None
+) -> BaseTool:
+    """One read-only SELECT against one attached connection, validated and bounded."""
+
+    async def call(connection_id: str, sql: str) -> str:
+        if connection_id != connection.id:
+            return f"Unknown data source: {connection_id}"
+        uri = decrypt_api_key(connection.encrypted_uri)
+        try:
+            assert_dial_allowed(uri)
+        except BlockedHostError as exc:
+            return f"Connection refused: {exc}"
+        try:
+            result = await run(
+                uri, sql, tables, agent_id=agent_id, connection_id=connection.id
+            )
+        except GuardError as exc:
+            return f"Query refused: {exc.reason}"
+        except DataSourceError as exc:
+            return f"Query failed: {exc}"
+        return json.dumps(
+            {
+                "columns": result.columns,
+                "rows": result.rows,
+                "row_count": result.row_count,
+                "truncated": result.truncated,
+            },
+            default=str,
+        )
+
+    return StructuredTool(
+        name=QUERY_DATA_SOURCE,
+        description=(
+            f"Run one read-only SELECT against the '{connection.name}' data source. "
+            f"Allowed tables: {', '.join(tables)}."
+        ),
+        args_schema=_QueryDataSourceInput,
+        coroutine=call,
+    )
+
+
+def describe_data_source_tool(
+    connection: "ExternalDatabaseConnection", tables: list[str]
+) -> BaseTool:
+    """The live table/column list for one attached connection."""
+
+    async def call(connection_id: str) -> str:
+        if connection_id != connection.id:
+            return f"Unknown data source: {connection_id}"
+        uri = decrypt_api_key(connection.encrypted_uri)
+        try:
+            assert_dial_allowed(uri)
+        except BlockedHostError as exc:
+            return f"Connection refused: {exc}"
+        try:
+            schema = await describe(uri)
+        except DataSourceError as exc:
+            return f"Describe failed: {exc}"
+        return json.dumps(
+            {
+                "tables": [
+                    {
+                        "schema": table.schema,
+                        "name": table.name,
+                        "columns": [
+                            {"name": c.name, "type": c.type, "nullable": c.nullable}
+                            for c in table.columns
+                        ],
+                    }
+                    for table in schema
+                ]
+            },
+            default=str,
+        )
+
+    return StructuredTool(
+        name=DESCRIBE_DATA_SOURCE,
+        description=(
+            f"List the tables and columns of the '{connection.name}' data source. "
+            f"Only these tables are queryable: {', '.join(tables)}."
+        ),
+        args_schema=_DescribeDataSourceInput,
+        coroutine=call,
+    )

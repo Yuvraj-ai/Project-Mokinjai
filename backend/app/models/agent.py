@@ -68,6 +68,9 @@ class Agent(Base):
     )
     connectors = relationship("AgentConnector", back_populates="agent", cascade="all, delete-orphan")
     tools = relationship("AgentTool", back_populates="agent", cascade="all, delete-orphan")
+    data_sources = relationship(
+        "AgentDataSource", back_populates="agent", cascade="all, delete-orphan"
+    )
     subagents = relationship(
         "AgentSubagent",
         back_populates="agent",
@@ -169,3 +172,31 @@ class AgentSubagent(Base):
 
     agent = relationship("Agent", back_populates="subagents", foreign_keys=[agent_id])
     subagent = relationship("Agent", foreign_keys=[subagent_id])
+
+
+class AgentDataSource(Base):
+    """One external database connection attached to one agent (D4).
+
+    `tables` is the allowlist snapshot: the exact qualified names the agent may
+    query. Tables created in the database later are not queryable until the
+    user re-saves. The connection FK is RESTRICT — an attached connection can
+    only be deleted after the agent detaches it.
+    """
+
+    __tablename__ = "agent_data_sources"
+    __table_args__ = (Index("ix_agent_data_sources_connection_id", "connection_id"),)
+
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
+    )
+    connection_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("external_database_connections.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    tables: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    agent = relationship("Agent", back_populates="data_sources")

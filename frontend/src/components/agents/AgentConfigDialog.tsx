@@ -28,12 +28,22 @@ import MultiSelect from './MultiSelect'
 import NumberSlider from './NumberSlider'
 import SkillPicker from './SkillPicker'
 import FilePicker, { type FileSelection } from './FilePicker'
+import DataSourcePicker, { type DataSourceSelection } from './DataSourcePicker'
+import { listExternalDatabases, type ExternalDatabase } from '../../api/externalDatabases'
+import Button from '../ui/Button'
 
 const SOURCE_LABEL: Record<string, string> = {
   profile_override: 'set on the LLM profile',
   model_profile: 'from the model card',
   fallback: 'universal default',
 }
+
+const inputClass =
+  'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring'
+const selectClass =
+  'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ring'
+const labelClass = 'mb-1.5 block text-[13px] font-medium text-ink'
+const errorClass = 'mt-1 block text-xs text-status-error'
 
 function blankInput(): AgentInput {
   return {
@@ -51,6 +61,7 @@ function blankInput(): AgentInput {
     documents: [],
     connector_ids: [],
     subagent_ids: [],
+    data_sources: [],
   }
 }
 
@@ -71,6 +82,7 @@ function toInput(agent: Agent): AgentInput {
     documents: [],
     connector_ids: [...agent.connector_ids],
     subagent_ids: [...agent.subagent_ids],
+    data_sources: agent.data_sources.map((item) => ({ id: item.id, tables: [...item.tables] })),
   }
 }
 
@@ -118,6 +130,7 @@ export default function AgentConfigDialog({
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
+  const [connections, setConnections] = useState<ExternalDatabase[]>([])
   const [issues, setIssues] = useState<string[]>(agent?.issues ?? [])
   const [saving, setSaving] = useState(false)
   const [prompts, setPrompts] = useState<PromptTemplate[]>([])
@@ -194,6 +207,12 @@ export default function AgentConfigDialog({
       cancelled = true
     }
   }, [agent, workspaceId])
+
+  useEffect(() => {
+    listExternalDatabases(workspaceId)
+      .then(setConnections)
+      .catch(() => setConnections([]))
+  }, [workspaceId])
 
   const selectedOption = options.llm_profiles.find((item) => item.id === form.llm_profile_id)
   const capabilities =
@@ -299,14 +318,14 @@ export default function AgentConfigDialog({
   const fieldError = (field: string) => errors[field] || undefined
 
   return (
-    <div className="fixed inset-0 z-40 flex bg-ink-900/30 p-2 sm:p-4">
-      <div className="flex w-full flex-col overflow-hidden rounded-xl border border-ink-100/60 dark:border-ink-700/60 bg-white dark:bg-ink-800 shadow-xl">
-        <header className="flex items-center justify-between border-b border-ink-100/60 dark:border-ink-700/60 px-5 py-3">
+    <div className="fixed inset-0 z-40 flex bg-black/40 p-2 sm:p-4 dark:bg-black/60">
+      <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-drawer animate-scale-in max-h-full">
+        <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <div className="min-w-0">
-            <h2 className="truncate font-display text-xl text-ink-800 dark:text-cream-100">
+            <h2 className="truncate text-base font-semibold text-ink">
               {agent ? agent.name : form.name || 'New agent'}
             </h2>
-            <p className="text-[10px] text-ink-400">
+            <p className="mt-0.5 font-mono text-xs text-ink-subtle">
               {agent ? `Created ${new Date(agent.created_at).toLocaleString()}` : 'Unsaved'}
             </p>
           </div>
@@ -316,60 +335,47 @@ export default function AgentConfigDialog({
                 type="button"
                 onClick={remove}
                 title="Delete agent"
-                className="rounded-lg p-2 text-ink-300 hover:text-status-error"
+                aria-label="Delete agent"
+                className="rounded-md p-2 text-ink-subtle transition-colors hover:bg-status-error-soft hover:text-status-error"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-3 py-1.5 text-xs text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-700"
-            >
+            <Button variant="ghost" size="sm" onClick={onClose}>
               Close
-            </button>
+            </Button>
           </div>
         </header>
 
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5 lg:flex-row">
+        <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-5 lg:flex-row">
           <section className="w-full space-y-4 lg:w-[340px] lg:shrink-0">
-            <h3 className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-              Parameters
-            </h3>
+            <h3 className="text-[13px] font-semibold text-ink">Parameters</h3>
 
             <label className="block">
-              <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                Agent name
-              </span>
+              <span className={labelClass}>Agent name</span>
               <input
                 value={form.name}
                 maxLength={AGENT_NAME_MAX}
                 onChange={(event) => setField('name', event.target.value)}
-                className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-sm text-ink-800 dark:text-cream-100"
+                className={inputClass}
               />
-              {fieldError('name') && (
-                <span className="mt-1 block text-[11px] text-status-error">{fieldError('name')}</span>
-              )}
+              {fieldError('name') && <span className={errorClass}>{fieldError('name')}</span>}
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                Description
-              </span>
+              <span className={labelClass}>Description</span>
               <input
                 value={form.description ?? ''}
                 maxLength={AGENT_DESCRIPTION_MAX}
                 onChange={(event) => setField('description', event.target.value)}
-                className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-sm text-ink-800 dark:text-cream-100"
+                className={inputClass}
               />
             </label>
 
             <div>
               <LlmPicker options={options.llm_profiles} value={form.llm_profile_id} onChange={chooseLlm} />
               {fieldError('llm_profile_id') && (
-                <span className="mt-1 block text-[11px] text-status-error">
-                  {fieldError('llm_profile_id')}
-                </span>
+                <span className={errorClass}>{fieldError('llm_profile_id')}</span>
               )}
             </div>
 
@@ -398,18 +404,16 @@ export default function AgentConfigDialog({
               onChange={(value) => setParams({ max_tokens: value })}
             />
             {fieldError('params.max_tokens') && (
-              <span className="block text-[11px] text-status-error">{fieldError('params.max_tokens')}</span>
+              <span className={errorClass}>{fieldError('params.max_tokens')}</span>
             )}
 
             {capabilities?.reasoning.supported && (
               <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                  Reasoning effort
-                </span>
+                <span className={labelClass}>Reasoning effort</span>
                 <select
                   value={form.params.reasoning ?? ''}
                   onChange={(event) => setParams({ reasoning: event.target.value || undefined })}
-                  className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+                  className={selectClass}
                 >
                   <option value="">Model default</option>
                   {capabilities.reasoning.levels.map((level) => (
@@ -421,12 +425,12 @@ export default function AgentConfigDialog({
               </label>
             )}
 
-            <label className="flex items-center gap-2 text-xs text-ink-600 dark:text-ink-200">
+            <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
                 checked={form.params.streaming ?? false}
                 onChange={(event) => setParams({ streaming: event.target.checked })}
-                className="accent-[#C4956A]"
+                className="accent-primary"
               />
               Stream tokens
             </label>
@@ -435,12 +439,12 @@ export default function AgentConfigDialog({
               <button
                 type="button"
                 onClick={() => setShowAdvanced((current) => !current)}
-                className="text-[10px] uppercase tracking-wider font-semibold text-ink-400 hover:text-ink-600"
+                className="text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
               >
                 {showAdvanced ? '−' : '+'} Advanced
               </button>
               {showAdvanced && capabilities && (
-                <div className="mt-3 space-y-4 rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-3">
+                <div className="mt-3 space-y-4 rounded-lg border border-line p-3.5">
                   {capabilities.advanced.top_p && (
                     <NumberSlider
                       label="Top P"
@@ -453,9 +457,7 @@ export default function AgentConfigDialog({
                   )}
                   {capabilities.advanced.seed && (
                     <label className="block">
-                      <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                        Seed
-                      </span>
+                      <span className={labelClass}>Seed</span>
                       <input
                         type="number"
                         value={form.params.seed ?? ''}
@@ -464,15 +466,13 @@ export default function AgentConfigDialog({
                             seed: event.target.value === '' ? undefined : Number(event.target.value),
                           })
                         }
-                        className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+                        className={inputClass}
                       />
                     </label>
                   )}
                   {capabilities.advanced.stop && (
                     <label className="block">
-                      <span className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                        Stop sequences (comma separated)
-                      </span>
+                      <span className={labelClass}>Stop sequences (comma separated)</span>
                       <input
                         value={stopText}
                         onChange={(event) => {
@@ -484,7 +484,7 @@ export default function AgentConfigDialog({
                               .filter(Boolean),
                           })
                         }}
-                        className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+                        className={inputClass}
                       />
                     </label>
                   )}
@@ -493,16 +493,12 @@ export default function AgentConfigDialog({
             </div>
           </section>
 
-          <section className="flex-1 space-y-5">
-            <h3 className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-              Configuration
-            </h3>
+          <section className="flex-1 space-y-6">
+            <h3 className="text-[13px] font-semibold text-ink">Configuration</h3>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                  System prompt
-                </span>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className={labelClass + ' mb-0'}>System prompt</span>
                 <select
                   value=""
                   onChange={(event) => {
@@ -515,7 +511,7 @@ export default function AgentConfigDialog({
                       }))
                     }
                   }}
-                  className="rounded-md border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-1.5 py-0.5 text-[10px] text-ink-500 dark:text-ink-200"
+                  className="rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink-muted focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Insert from Prompts…</option>
                   {prompts.map((prompt) => (
@@ -530,22 +526,20 @@ export default function AgentConfigDialog({
                 rows={6}
                 maxLength={AGENT_PROMPT_MAX}
                 onChange={(event) => setField('system_prompt', event.target.value)}
-                className="w-full resize-y rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-2 text-xs text-ink-800 dark:text-cream-100"
+                className="w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {form.source_prompt_id && (
-                <span className="mt-1 block text-[10px] text-ink-400">
+                <span className="mt-1 block text-xs text-ink-subtle">
                   Copied from a prompt; later edits there do not change this agent.
                 </span>
               )}
               {fieldError('system_prompt') && (
-                <span className="mt-1 block text-[11px] text-status-error">
-                  {fieldError('system_prompt')}
-                </span>
+                <span className={errorClass}>{fieldError('system_prompt')}</span>
               )}
             </div>
 
-            <div className="rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-3">
-              <label className="mb-2 flex items-center gap-2 text-xs text-ink-600 dark:text-ink-200">
+            <div className="rounded-lg border border-line p-3.5">
+              <label className="mb-2 flex items-center gap-2 text-sm text-ink">
                 <input
                   type="checkbox"
                   checked={form.structured_output_id !== null}
@@ -555,7 +549,7 @@ export default function AgentConfigDialog({
                       event.target.checked ? (options.structured_outputs[0]?.id ?? '') : null
                     )
                   }
-                  className="accent-[#C4956A]"
+                  className="accent-primary"
                 />
                 Structured output
               </label>
@@ -563,7 +557,7 @@ export default function AgentConfigDialog({
                 <select
                   value={form.structured_output_id}
                   onChange={(event) => setField('structured_output_id', event.target.value)}
-                  className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+                  className={selectClass}
                 >
                   {options.structured_outputs.map((output) => (
                     <option key={output.id} value={output.id}>
@@ -573,14 +567,12 @@ export default function AgentConfigDialog({
                 </select>
               )}
               {fieldError('structured_output_id') && (
-                <span className="mt-1 block text-[11px] text-status-error">
-                  {fieldError('structured_output_id')}
-                </span>
+                <span className={errorClass}>{fieldError('structured_output_id')}</span>
               )}
             </div>
 
-            <div className="rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-3">
-              <label className="mb-2 flex items-center gap-2 text-xs text-ink-600 dark:text-ink-200">
+            <div className="rounded-lg border border-line p-3.5">
+              <label className="mb-2 flex items-center gap-2 text-sm text-ink">
                 <input
                   type="checkbox"
                   checked={form.web_search?.enabled ?? false}
@@ -592,7 +584,7 @@ export default function AgentConfigDialog({
                         : null
                     )
                   }
-                  className="accent-[#C4956A]"
+                  className="accent-primary"
                 />
                 Web search
               </label>
@@ -606,7 +598,7 @@ export default function AgentConfigDialog({
                         method: event.target.value as WebSearchMethod,
                       })
                     }
-                    className="w-full rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+                    className={selectClass}
                   >
                     {SEARCH_KEY_PROVIDERS.map((provider) => (
                       <option key={provider} value={provider}>
@@ -620,7 +612,7 @@ export default function AgentConfigDialog({
 
                   {form.web_search.method !== 'native' &&
                     (hasKey(form.web_search.method) ? (
-                      <p className="text-[10px] text-status-success">
+                      <p className="text-xs text-status-success">
                         A {form.web_search.method} API key is stored.
                       </p>
                     ) : (
@@ -630,24 +622,21 @@ export default function AgentConfigDialog({
                           value={keyDraft}
                           onChange={(event) => setKeyDraft(event.target.value)}
                           placeholder={`${form.web_search.method} API key`}
-                          className="flex-1 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream-50 dark:bg-ink-700/50 px-2.5 py-1.5 text-xs text-ink-800 dark:text-cream-100"
+                          className="flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring"
                         />
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
                           disabled={savingKey || !keyDraft.trim()}
                           onClick={() => void saveKey(form.web_search?.method as WebSearchMethod)}
-                          className="rounded-lg bg-accent-warm px-3 py-1.5 text-xs text-white disabled:opacity-50"
                         >
                           {savingKey ? 'Saving…' : 'Save key'}
-                        </button>
+                        </Button>
                       </div>
                     ))}
                 </div>
               )}
               {fieldError('web_search') && (
-                <span className="mt-1 block text-[11px] text-status-error">
-                  {fieldError('web_search')}
-                </span>
+                <span className={errorClass}>{fieldError('web_search')}</span>
               )}
             </div>
 
@@ -662,12 +651,10 @@ export default function AgentConfigDialog({
               toolError={fieldError('tool_ids')}
             />
 
-            <div className="rounded-lg border border-ink-100/70 dark:border-ink-700/70 p-3">
+            <div className="rounded-lg border border-line p-3.5">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400">
-                  Files
-                </span>
-                <span className="text-[11px] text-ink-500 dark:text-ink-300">
+                <span className="text-[13px] font-medium text-ink">Files</span>
+                <span className="font-mono text-xs text-ink-subtle">
                   {filesLoading
                     ? 'Checking files…'
                     : fileCount > 0
@@ -676,16 +663,16 @@ export default function AgentConfigDialog({
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={filesLoading}
                   onClick={() => setPickerOpen(true)}
-                  className="rounded-lg border border-ink-100 dark:border-ink-600 px-3 py-1.5 text-xs text-ink-600 dark:text-ink-200 hover:bg-ink-50 dark:hover:bg-ink-700 disabled:opacity-50"
                 >
                   Edit files
-                </button>
+                </Button>
                 {fieldError('documents') && (
-                  <span className="text-[11px] text-status-error">{fieldError('documents')}</span>
+                  <span className="text-xs text-status-error">{fieldError('documents')}</span>
                 )}
               </div>
               <FilePicker
@@ -697,6 +684,13 @@ export default function AgentConfigDialog({
                 onClose={() => setPickerOpen(false)}
               />
             </div>
+
+            <DataSourcePicker
+              connections={connections}
+              value={form.data_sources as DataSourceSelection}
+              onChange={(value) => setForm((previous) => ({ ...previous, data_sources: value }))}
+              error={fieldError('data_sources')}
+            />
 
             <MultiSelect
               label="Connectors"
@@ -719,11 +713,11 @@ export default function AgentConfigDialog({
             />
 
             {issues.length > 0 && (
-              <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3">
-                <p className="mb-1 flex items-center gap-2 text-[11px] font-semibold text-status-warning">
-                  <AlertTriangle className="h-3 w-3" /> This agent needs attention
+              <div className="rounded-lg border border-status-warning/30 bg-status-warning-soft p-3.5">
+                <p className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-status-warning">
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> This agent needs attention
                 </p>
-                <ul className="list-inside list-disc text-[11px] text-ink-600 dark:text-ink-200">
+                <ul className="list-inside list-disc text-[13px] text-ink">
                   {issues.map((issue) => (
                     <li key={issue}>{issue}</li>
                   ))}
@@ -732,29 +726,20 @@ export default function AgentConfigDialog({
             )}
 
             {message && (
-              <p className="rounded-lg border border-status-error/40 px-3 py-2 text-[11px] text-status-error">
+              <p className="rounded-lg bg-status-error-soft px-3 py-2 text-[13px] text-status-error">
                 {message}
               </p>
             )}
           </section>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-ink-100/60 dark:border-ink-700/60 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-1.5 text-xs text-ink-500 hover:bg-ink-50 dark:hover:bg-ink-700"
-          >
+        <footer className="flex items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            disabled={saving || filesLoading}
-            onClick={() => void save()}
-            className="rounded-lg bg-accent-warm px-4 py-1.5 text-xs text-white disabled:opacity-50"
-          >
+          </Button>
+          <Button size="sm" disabled={saving || filesLoading} onClick={() => void save()}>
             {saving ? 'Saving…' : agent ? 'Save changes' : 'Create agent'}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

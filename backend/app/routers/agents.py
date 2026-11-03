@@ -10,9 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.middleware.rbac import require_workspace_role
+from app.models.external_database import ExternalDatabaseConnection
 from app.models.agent import (
     Agent,
     AgentConnector,
+    AgentDataSource,
     AgentDocument,
     AgentSkill,
     AgentSubagent,
@@ -30,6 +32,7 @@ from app.models.tool import Tool
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
 from app.schemas.agent import (
+    AgentDataSourceItem,
     AgentDocumentItem,
     AgentCapabilitiesResponse,
     AgentChatRequest,
@@ -47,6 +50,7 @@ from app.services.agent_capabilities import capabilities_for
 from app.services.agent_composition import (
     attachment_rows,
     AgentInput,
+    DataSourceRule,
     FolderRule,
     CompositionError,
     assert_name_is_free,
@@ -93,6 +97,10 @@ def _input(request: AgentWriteRequest) -> AgentInput:
             for rule in request.folders
         ],
         documents=list(request.documents),
+        data_sources=[
+            DataSourceRule(id=rule.id, tables=list(rule.tables))
+            for rule in request.data_sources
+        ],
         connector_ids=request.connector_ids,
         subagent_ids=request.subagent_ids,
     )
@@ -151,9 +159,24 @@ def _add_attachments(db: AsyncSession, agent_id: str, validated) -> None:
     )
 
 
+def _add_data_sources(db: AsyncSession, agent_id: str, validated) -> None:
+    """One allowlist row per attached connection; the tables list is the snapshot."""
+    db.add_all(
+        [
+            AgentDataSource(
+                agent_id=agent_id,
+                connection_id=item.connection.id,
+                tables=list(item.tables),
+            )
+            for item in validated.data_sources
+        ]
+    )
+
+
 async def _replace_joins(db: AsyncSession, agent_id: str, ids: dict[str, list[str]]) -> None:
     for model in (AgentSkill, AgentTool, AgentConnector, AgentSubagent, AgentDocument):
         await db.execute(delete(model).where(model.agent_id == agent_id))
+    await db.execute(delete(AgentDataSource).where(AgentDataSource.agent_id == agent_id))
     _add_joins(db, agent_id, ids)
 
 
@@ -336,6 +359,32 @@ async def _to_response(
         ],
     )
 
+    data_source_rows = (
+        (
+            await db.execute(
+                select(AgentDataSource).where(AgentDataSource.agent_id == agent.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    connection_names = (
+        {
+            row.id: row.name
+            for row in (
+                await db.execute(
+                    select(ExternalDatabaseConnection).where(
+                        ExternalDatabaseConnection.workspace_id == agent.workspace_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+        if data_source_rows
+        else {}
+    )
+
     return AgentResponse(
         id=agent.id,
         workspace_id=agent.workspace_id,
@@ -357,6 +406,14 @@ async def _to_response(
                 source_folder_id=source_folder_id,
             )
             for document, source_folder_id in await attachment_rows(db, agent.id)
+        ],
+        data_sources=[
+            AgentDataSourceItem(
+                id=row.connection_id,
+                name=connection_names.get(row.connection_id, row.connection_id),
+                tables=list(row.tables or []),
+            )
+            for row in data_source_rows
         ],
         connector_ids=ids["connector_ids"],
         subagent_ids=ids["subagent_ids"],
@@ -562,6 +619,7 @@ async def create_agent(
     await db.flush()
     _add_joins(db, agent.id, _ids_from_validated(validated))
     _add_attachments(db, agent.id, validated)
+    _add_data_sources(db, agent.id, validated)
     try:
         await db.commit()
     except IntegrityError:
@@ -612,6 +670,7 @@ async def update_agent(
     agent.web_search = validated.web_search
     await _replace_joins(db, agent.id, _ids_from_validated(validated))
     _add_attachments(db, agent.id, validated)
+    _add_data_sources(db, agent.id, validated)
     try:
         await db.commit()
     except IntegrityError:

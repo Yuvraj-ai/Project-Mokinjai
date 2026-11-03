@@ -28,6 +28,7 @@ class AgentWriteRequest(BaseModel):
     tool_ids: list[str] = Field(default_factory=list)
     folders: list[AgentFolderRule] = Field(default_factory=list)
     documents: list[str] = Field(default_factory=list)
+    data_sources: list[AgentDataSourceRule] = Field(default_factory=list)
     connector_ids: list[str] = Field(default_factory=list)
     subagent_ids: list[str] = Field(default_factory=list)
 
@@ -81,6 +82,23 @@ class ResolvedDependencies(BaseModel):
     tools: list[ResolvedTool] = Field(default_factory=list)
 
 
+class AgentDataSourceRule(BaseModel):
+    """One attached connection and the exact tables the agent may query.
+
+    The allowlist is a snapshot: tables created later are not queryable until
+    the agent is re-saved. An empty list is refused — "no tables" means detach.
+    """
+
+    id: str
+    tables: list[str] = Field(min_length=1)
+
+
+class AgentDataSourceItem(BaseModel):
+    id: str
+    name: str
+    tables: list[str]
+
+
 class AgentDocumentItem(BaseModel):
     id: str
     filename: str | None
@@ -102,6 +120,7 @@ class AgentResponse(BaseModel):
     skill_ids: list[str] = Field(default_factory=list)
     tool_ids: list[str] = Field(default_factory=list)
     documents: list[AgentDocumentItem] = Field(default_factory=list)
+    data_sources: list[AgentDataSourceItem] = Field(default_factory=list)
     connector_ids: list[str] = Field(default_factory=list)
     subagent_ids: list[str] = Field(default_factory=list)
     resolved: ResolvedDependencies = Field(default_factory=ResolvedDependencies)
