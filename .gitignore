@@ -85,5 +85,8 @@ keys.txt
 .superpowers/
 .playwright-mcp/
 mokinjay-progress-assets/
+mokinjay-progress.pdf
+.design-port/
+backboard_frontend/
 # Uploaded files (local storage backend)
 backend/storage/
