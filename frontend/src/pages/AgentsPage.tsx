@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bot, MessageSquare, Plus, Settings2, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Bot, MessagesSquare, Plus, Settings2, Trash2 } from 'lucide-react'
 import { listWorkspaces } from '../api/workspaces'
 import {
   deleteAgent,
@@ -11,7 +12,6 @@ import {
   type AgentListItem,
   type AgentOptions,
 } from '../api/agents'
-import AgentChatPanel from '../components/agents/AgentChatPanel'
 import AgentConfigDialog from '../components/agents/AgentConfigDialog'
 import AgentCreateDialog from '../components/agents/AgentCreateDialog'
 import Button from '../components/ui/Button'
@@ -31,9 +31,9 @@ export default function AgentsPage() {
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [options, setOptions] = useState<AgentOptions | null>(null)
-  const [chatAgent, setChatAgent] = useState<AgentListItem | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   const refresh = useCallback(async (id: string) => {
     setAgents(await listAgents(id))
@@ -110,7 +110,6 @@ export default function AgentsPage() {
     try {
       await deleteAgent(workspaceId, item.id)
       await refresh(workspaceId)
-      if (chatAgent?.id === item.id) setChatAgent(null)
     } catch (caught) {
       setBanner(fieldErrors(caught).message ?? 'Could not delete that agent.')
     }
@@ -157,9 +156,7 @@ export default function AgentsPage() {
                 <li
                   key={item.id}
                   className={`group rounded-lg px-2 py-1.5 transition-colors duration-150 ${
-                    chatAgent?.id === item.id
-                      ? 'bg-surface-muted'
-                      : 'hover:bg-surface-muted'
+                    'hover:bg-surface-muted'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -196,11 +193,11 @@ export default function AgentsPage() {
                       </button>
                       <button
                         type="button"
-                        title="Chat"
-                        onClick={() => setChatAgent(item)}
+                        title="Chat in the Playground"
+                        onClick={() => navigate(`/playground?agent=${item.id}`)}
                         className="rounded p-1 text-ink-subtle hover:bg-surface-muted hover:text-ink"
                       >
-                        <MessageSquare className="h-3.5 w-3.5" />
+                        <MessagesSquare className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
@@ -226,18 +223,9 @@ export default function AgentsPage() {
       </aside>
 
       <section className="flex-1 overflow-hidden">
-        {chatAgent ? (
-          <AgentChatPanel
-            workspaceId={workspaceId}
-            agentId={chatAgent.id}
-            agentName={chatAgent.name}
-            onClose={() => setChatAgent(null)}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-ink-subtle">
-            Open an agent to configure it, or press the chat icon to test it.
-          </div>
-        )}
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-ink-subtle">
+          Open an agent to configure it, or press the chat icon to run it in the Playground.
+        </div>
       </section>
 
       {creating && (
@@ -262,7 +250,6 @@ export default function AgentsPage() {
           }}
           onDeleted={(agentId) => {
             setDraft(null)
-            if (chatAgent?.id === agentId) setChatAgent(null)
             void refresh(workspaceId)
           }}
         />
