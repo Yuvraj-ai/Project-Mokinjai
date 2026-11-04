@@ -1,9 +1,13 @@
 from contextlib import asynccontextmanager
 import asyncio
+import uuid
 from fastapi import FastAPI, WebSocket, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.logging import logger
+from app.middleware.public_auth import PublicAuthError, public_error_response
 from app.routers import (
     auth,
     workspaces,
@@ -22,6 +26,8 @@ from app.routers import (
     api_keys,
     search_credentials,
 )
+from app.routers.public import router as public_router
+from app.utils.errors import AppException
 from app.websocket.execution_ws import execution_websocket
 from app.services.otp_store import otp_store
 from app.services.sessions import prune_expired_sessions
@@ -144,6 +150,62 @@ app.include_router(
 async def health_check():
     logger.debug("Health check requested")
     return {"status": "ok"}
+
+
+# The public /v1 surface: its own sub-application so its OpenAPI document
+# cannot advertise internal routes, with the public error envelope in place
+# of FastAPI's default {detail} shape. Bearer-key auth only — no cookies, so
+# permissive CORS with credentials off is correct for a server-to-server API.
+public_app = FastAPI(
+    title="Mokinjay Public API",
+    version="1.0.0",
+    docs_url="/docs",
+    openapi_url="/openapi.json",
+)
+
+
+@public_app.exception_handler(PublicAuthError)
+async def public_auth_error_handler(request: Request, exc: PublicAuthError):
+    status_by_code = {
+        "invalid_api_key": 401,
+        "key_disabled": 401,
+        "key_expired": 401,
+        "conversation_not_found": 404,
+        "agent_unavailable": 403,
+        "agent_mismatch": 409,
+        "rate_limit_exceeded": 429,
+        "credit_limit_exceeded": 402,
+        "invalid_request": 400,
+    }
+    status = status_by_code.get(exc.code, 400)
+    return JSONResponse(
+        status_code=status,
+        content=public_error_response(exc.code, exc.message, status, f"req_{uuid.uuid4().hex[:16]}")["body"],
+    )
+
+
+@public_app.exception_handler(AppException)
+async def public_not_found_handler(request: Request, exc: AppException):
+    status = exc.status_code if hasattr(exc, "status_code") else 404
+    code = "not_found" if status == 404 else "invalid_request"
+    return JSONResponse(
+        status_code=status,
+        content=public_error_response(code, str(exc.detail), status, f"req_{uuid.uuid4().hex[:16]}")["body"],
+    )
+
+
+@public_app.exception_handler(RequestValidationError)
+async def public_validation_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=400,
+        content=public_error_response(
+            "invalid_request", "The request body is malformed.", 400, f"req_{uuid.uuid4().hex[:16]}"
+        )["body"],
+    )
+
+
+public_app.include_router(public_router)
+app.mount("/v1", public_app)
 
 
 @app.get("/v1/models", include_in_schema=False)

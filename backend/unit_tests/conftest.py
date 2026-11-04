@@ -97,10 +97,16 @@ async def client(session_factory):
                 await session.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    # The /v1 sub-app has its own override registry — mount the same test
+    # session there or the public surface would hit the real database.
+    from app.main import public_app
+
+    public_app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+    public_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture(scope="function")
