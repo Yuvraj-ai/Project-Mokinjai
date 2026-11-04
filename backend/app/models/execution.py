@@ -21,6 +21,11 @@ class Execution(Base):
     agent_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # The API key that made this call, when the trigger was the public /v1
+    # surface — the per-key spend ledger sums this column.
+    api_key_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # pending, running, completed, failed, cancelled
     trigger_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # manual, api, scheduled, webhook, chat
     input_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

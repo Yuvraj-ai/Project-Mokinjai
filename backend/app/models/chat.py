@@ -36,6 +36,11 @@ class ChatSession(Base):
     agent_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Set when the session was created through the public /v1 surface: a key
+    # may only read and append to sessions it created (exfiltration guard).
+    api_key_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="New session")
     created_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

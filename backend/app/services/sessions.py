@@ -26,13 +26,19 @@ def new_refresh_token() -> str:
     return secrets.token_urlsafe(_REFRESH_TOKEN_BYTES)
 
 
-def hash_token(token: str) -> str:
-    """SHA-256 of a refresh token.
+def hash_secret(secret: str) -> str:
+    """SHA-256 of a 256-bit CSPRNG secret (refresh tokens, API keys).
 
-    A plain digest rather than a slow KDF: the token is 256 bits of CSPRNG output,
-    so there is no low-entropy guess to slow down.
+    A plain digest rather than a slow KDF: the input has no low-entropy guess
+    to slow down. Shared by sessions and api-keys so the one-way posture has
+    exactly one implementation.
     """
-    return hashlib.sha256(token.encode()).hexdigest()
+    return hashlib.sha256(secret.encode()).hexdigest()
+
+
+def hash_token(token: str) -> str:
+    """SHA-256 of a refresh token. See `hash_secret`."""
+    return hash_secret(token)
 
 
 async def create_session(
