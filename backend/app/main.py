@@ -19,6 +19,7 @@ from app.routers import (
     connectors,
     agents,
     playground,
+    api_keys,
     search_credentials,
 )
 from app.websocket.execution_ws import execution_websocket
@@ -126,6 +127,11 @@ app.include_router(
     playground.router,
     prefix="/api/workspaces/{workspace_id}/playground",
     tags=["playground"],
+)
+app.include_router(
+    api_keys.router,
+    prefix="/api/workspaces/{workspace_id}/api-keys",
+    tags=["api-keys"],
 )
 app.include_router(
     search_credentials.router,
