@@ -558,9 +558,10 @@ async def assert_name_is_free(
         raise ConflictException(f'An agent named "{existing.name}" already exists.')
 
 
-# Kinds with an executor in this backend (D1). Everything else is creatable but
-# cannot be attached to an agent until its executor lands.
-QUERYABLE_KINDS = ("postgres",)
+# Kinds with an executor in this backend (D1 + the 2026-11-05 addendum).
+# Everything else is creatable but cannot be attached to an agent until its
+# executor lands.
+QUERYABLE_KINDS = ("postgres", "mysql", "mongodb")
 
 
 async def _load_data_sources(

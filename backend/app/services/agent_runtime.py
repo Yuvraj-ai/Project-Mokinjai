@@ -49,6 +49,7 @@ from app.services.agent_dependencies import DEFAULT_MAX_SUBAGENT_DEPTH
 from app.services.agent_tools import (
     describe_data_source_tool,
     query_data_source_tool,
+    query_document_data_source_tool,
     read_skill_tool,
     sandbox_python_tool,
     subagent_tool,
@@ -219,10 +220,33 @@ async def build_tools(
                 )
             )
 
-    for item in validated.data_sources:
-        tools.append(query_data_source_tool(item.connection, item.tables, validated.agent_id))
-        tools.append(describe_data_source_tool(item.connection, item.tables))
-
+    sql_attachments = [
+        item for item in validated.data_sources if item.connection.kind in ("postgres", "mysql")
+    ]
+    document_attachments = [
+        item for item in validated.data_sources if item.connection.kind == "mongodb"
+    ]
+    if sql_attachments:
+        tools.append(
+            query_data_source_tool(
+                [(item.connection, item.tables) for item in sql_attachments],
+                validated.agent_id,
+            )
+        )
+    if document_attachments:
+        tools.append(
+            query_document_data_source_tool(
+                [(item.connection, item.tables) for item in document_attachments],
+                validated.agent_id,
+            )
+        )
+    if validated.data_sources:
+        tools.append(
+            describe_data_source_tool(
+                [(item.connection, item.tables) for item in sql_attachments],
+                [(item.connection, item.tables) for item in document_attachments],
+            )
+        )
     if validated.selected_skills:
         tools.append(read_skill_tool(validated.resolved_skills))
 
@@ -312,17 +336,37 @@ def _system_prompt(prompt: str, validated: ValidatedAgent) -> str:
             f"read_skill with its name and follow the returned instructions.\n{lines}"
         )
     if validated.data_sources:
-        lines = "\n".join(
-            f"- {item.connection.name} (connection_id: {item.connection.id}); "
-            f"queryable tables: {', '.join(item.tables)}"
-            for item in validated.data_sources
-        )
-        sections.append(
-            "External data sources are attached. To read from them, call "
-            "query_data_source with the connection_id and a single read-only "
-            "SELECT limited to the listed tables; call describe_data_source to "
-            f"discover columns.\n{lines}"
-        )
+        sql_items = [
+            item for item in validated.data_sources
+            if item.connection.kind in ("postgres", "mysql")
+        ]
+        document_items = [
+            item for item in validated.data_sources if item.connection.kind == "mongodb"
+        ]
+        if sql_items:
+            lines = "\n".join(
+                f"- {item.connection.name} ({item.connection.kind}; connection_id: "
+                f"{item.connection.id}); queryable tables: {', '.join(item.tables)}"
+                for item in sql_items
+            )
+            sections.append(
+                "External SQL data sources are attached. To read from them, call "
+                "query_data_source with the connection_id and a single read-only "
+                "SELECT limited to the listed tables; call describe_data_source to "
+                f"discover columns.\n{lines}"
+            )
+        if document_items:
+            lines = "\n".join(
+                f"- {item.connection.name} (mongodb; connection_id: {item.connection.id}); "
+                f"queryable collections: {', '.join(item.tables)}"
+                for item in document_items
+            )
+            sections.append(
+                "External MongoDB data sources are attached. To read from them, call "
+                "query_document_data_source with the connection_id, a collection from "
+                "the list, and a JSON filter object (find() semantics, read-only); call "
+                f"describe_data_source to discover fields.\n{lines}"
+            )
     if not sections:
         return prompt
     return prompt + "\n\n" + "\n\n".join(sections)

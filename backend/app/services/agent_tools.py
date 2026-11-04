@@ -19,6 +19,10 @@ from app.crypto import decrypt_api_key
 from app.models.external_database import ExternalDatabaseConnection
 from app.schemas.tool import ParameterType, ToolSchema
 from app.services.agent_dependencies import ResolvedSkills
+from app.services.data_sources.mongo import describe as describe_mongo
+from app.services.data_sources.mongo import run_find
+from app.services.data_sources.mysql import describe as describe_mysql
+from app.services.data_sources.mysql import DataSourceError as _MysqlDataSourceError  # noqa: F401
 from app.services.data_sources.postgres import DataSourceError, describe, run
 from app.services.data_sources.guard import GuardError
 from app.services.data_sources.ssrf import BlockedHostError, assert_dial_allowed
@@ -200,6 +204,7 @@ def _subagent_tool_name(name: str, agent_id: str) -> str:
 # sandbox never sees a URI — these run where the credentials already live.
 
 QUERY_DATA_SOURCE = "query_data_source"
+QUERY_DOCUMENT_DATA_SOURCE = "query_document_data_source"
 DESCRIBE_DATA_SOURCE = "describe_data_source"
 
 
@@ -211,18 +216,48 @@ class _QueryDataSourceInput(BaseModel):
     )
 
 
+class _QueryDocumentDataSourceInput(BaseModel):
+    connection_id: str = Field(description="The connection_id of the data source to query.")
+    collection: str = Field(description="The collection to read from. Only collections listed for this data source may be used.")
+    filter: str = Field(
+        description='A JSON object — the find() query document, e.g. {"status": "paid", "total": {"$gt": 100}}. {} matches every document.'
+    )
+    projection: str | None = Field(
+        default=None,
+        description='Optional JSON object of fields to include or exclude, e.g. {"total": 1}. Plain field names only.',
+    )
+    limit: int | None = Field(default=None, description="Optional cap on documents (at most 200).")
+
+
 class _DescribeDataSourceInput(BaseModel):
     connection_id: str = Field(description="The connection_id of the data source to describe.")
 
 
+def _matching(connections, connection_id: str):
+    """The attached connection with this id, or None."""
+    for connection, _tables in connections:
+        if connection.id == connection_id:
+            return connection
+    return None
+
+
 def query_data_source_tool(
-    connection: "ExternalDatabaseConnection", tables: list[str], agent_id: str | None = None
+    connections: list[tuple["ExternalDatabaseConnection", list[str]]],
+    agent_id: str | None = None,
 ) -> BaseTool:
-    """One read-only SELECT against one attached connection, validated and bounded."""
+    """One read-only SELECT against any attached SQL connection.
+
+    One tool per KIND, not per connection: the tool dispatches on
+    connection_id, so two attached Postgres connections no longer collide on
+    the shared tool name (the dedupe in build_tools used to drop the second).
+    """
+    names = ", ".join(f"{connection.name} ({', '.join(tables)})" for connection, tables in connections)
 
     async def call(connection_id: str, sql: str) -> str:
-        if connection_id != connection.id:
+        connection = _matching(connections, connection_id)
+        if connection is None:
             return f"Unknown data source: {connection_id}"
+        tables = next(t for c, t in connections if c.id == connection.id)
         uri = decrypt_api_key(connection.encrypted_uri)
         try:
             assert_dial_allowed(uri)
@@ -230,7 +265,14 @@ def query_data_source_tool(
             return f"Connection refused: {exc}"
         try:
             result = await asyncio.wait_for(
-                run(uri, sql, tables, agent_id=agent_id, connection_id=connection.id),
+                run(
+                    uri,
+                    sql,
+                    tables,
+                    agent_id=agent_id,
+                    connection_id=connection.id,
+                    dialect=connection.kind,
+                ),
                 timeout=TOOL_TIMEOUT_S,
             )
         except asyncio.TimeoutError:
@@ -252,21 +294,89 @@ def query_data_source_tool(
     return StructuredTool(
         name=QUERY_DATA_SOURCE,
         description=(
-            f"Run one read-only SELECT against the '{connection.name}' data source. "
-            f"Allowed tables: {', '.join(tables)}."
+            f"Run one read-only SELECT against an attached SQL data source. "
+            f"Attached: {names}. The connection_id picks the database; only its "
+            f"listed tables may appear in the query."
         ),
         args_schema=_QueryDataSourceInput,
         coroutine=call,
     )
 
 
-def describe_data_source_tool(
-    connection: "ExternalDatabaseConnection", tables: list[str]
+def query_document_data_source_tool(
+    connections: list[tuple["ExternalDatabaseConnection", list[str]]],
+    agent_id: str | None = None,
 ) -> BaseTool:
-    """The live table/column list for one attached connection."""
+    """One read-only find() against any attached MongoDB connection."""
+    names = ", ".join(f"{connection.name} ({', '.join(tables)})" for connection, tables in connections)
+
+    async def call(
+        connection_id: str, collection: str, filter: str,
+        projection: str | None = None, limit: int | None = None,
+    ) -> str:
+        connection = _matching(connections, connection_id)
+        if connection is None:
+            return f"Unknown data source: {connection_id}"
+        tables = next(t for c, t in connections if c.id == connection.id)
+        uri = decrypt_api_key(connection.encrypted_uri)
+        database = connection.database_name
+        try:
+            assert_dial_allowed(uri)
+        except BlockedHostError as exc:
+            return f"Connection refused: {exc}"
+        try:
+            result = await asyncio.wait_for(
+                run_find(
+                    uri,
+                    database,
+                    collection,
+                    tables,
+                    filter,
+                    projection,
+                    limit,
+                    agent_id=agent_id,
+                    connection_id=connection.id,
+                ),
+                timeout=TOOL_TIMEOUT_S,
+            )
+        except GuardError as exc:
+            return f"Query refused: {exc.reason}"
+        except DataSourceError as exc:
+            return f"Query failed: {exc}"
+        return json.dumps(
+            {
+                "collection": collection,
+                "fields": result.columns,
+                "documents": result.rows,
+                "row_count": result.row_count,
+                "truncated": result.truncated,
+            },
+            default=str,
+        )
+
+    return StructuredTool(
+        name=QUERY_DOCUMENT_DATA_SOURCE,
+        description=(
+            f"Run one read-only find() against an attached MongoDB data source. "
+            f"Attached: {names}. The connection_id picks the database; only its "
+            f"listed collections may be queried; the filter is a JSON object."
+        ),
+        args_schema=_QueryDocumentDataSourceInput,
+        coroutine=call,
+    )
+
+
+def describe_data_source_tool(
+    sql_connections: list[tuple["ExternalDatabaseConnection", list[str]]],
+    document_connections: list[tuple["ExternalDatabaseConnection", list[str]]],
+) -> BaseTool:
+    """The live table/collection list, dispatching on the connection's kind."""
+    all_connections = sql_connections + document_connections
+    names = ", ".join(connection.name for connection, _tables in all_connections)
 
     async def call(connection_id: str) -> str:
-        if connection_id != connection.id:
+        connection = _matching(all_connections, connection_id)
+        if connection is None:
             return f"Unknown data source: {connection_id}"
         uri = decrypt_api_key(connection.encrypted_uri)
         try:
@@ -274,7 +384,12 @@ def describe_data_source_tool(
         except BlockedHostError as exc:
             return f"Connection refused: {exc}"
         try:
-            schema = await describe(uri)
+            if connection.kind == "mongodb":
+                schema = await describe_mongo(uri, database=connection.database_name)
+            elif connection.kind == "mysql":
+                schema = await describe_mysql(uri)
+            else:
+                schema = await describe(uri)
         except DataSourceError as exc:
             return f"Describe failed: {exc}"
         return json.dumps(
@@ -297,8 +412,8 @@ def describe_data_source_tool(
     return StructuredTool(
         name=DESCRIBE_DATA_SOURCE,
         description=(
-            f"List the tables and columns of the '{connection.name}' data source. "
-            f"Only these tables are queryable: {', '.join(tables)}."
+            f"List the tables/collections of an attached data source. "
+            f"Attached: {names}. Only the listed names are queryable."
         ),
         args_schema=_DescribeDataSourceInput,
         coroutine=call,

@@ -24,8 +24,9 @@ from app.schemas.external_database import (
     ExternalDatabaseUpdate,
 )
 from app.services.data_sources import schema_cache
+from app.services.data_sources.mongo import describe as describe_mongo
+from app.services.data_sources.mysql import describe as describe_mysql
 from app.services.data_sources.postgres import DataSourceError, describe
-from app.services.data_sources.postgres import describe
 from app.services.data_sources.ssrf import BlockedHostError, assert_dial_allowed
 from app.schemas.external_database import ConnectionSchemaResponse
 from app.utils.errors import (
@@ -243,7 +244,12 @@ async def get_connection_schema(
         raise BadRequestException(str(exc)) from exc
 
     try:
-        tables = await describe(uri)
+        if row.kind == "mongodb":
+            tables = await describe_mongo(uri, database=row.database_name)
+        elif row.kind == "mysql":
+            tables = await describe_mysql(uri)
+        else:
+            tables = await describe(uri)
     except DataSourceError as exc:
         raise AppException(status_code=502, detail=str(exc)) from exc
 

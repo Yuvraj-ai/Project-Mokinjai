@@ -196,3 +196,64 @@ class TestCaseAndQuoting:
 
     def test_schema_qualified_selected_table(self):
         _ok("SELECT * FROM public.users")
+
+
+class TestMySqlDialect:
+    """The same guard, the MySQL dialect (addendum 2026-11-05)."""
+
+    MYSQL_SELECTED = ["app.users", "app.orders"]
+
+    def _ok(self, sql: str, allowed: list[str] | None = None) -> None:
+        validate(sql, "mysql", self.MYSQL_SELECTED if allowed is None else allowed)
+
+    def _rejected(self, sql: str, match: str | None = None) -> None:
+        with pytest.raises(GuardError, match=match):
+            validate(sql, "mysql", self.MYSQL_SELECTED)
+
+    def test_plain_select_accepted(self):
+        self._ok("SELECT * FROM app.users")
+
+    def test_unqualified_name_matches(self):
+        self._ok("SELECT * FROM users")
+
+    def test_backtick_identifiers_accepted(self):
+        self._ok("SELECT * FROM `app`.`users` WHERE `name` = 'x'")
+
+    def test_union_crossing_the_allowlist_rejected(self):
+        self._rejected("SELECT * FROM app.users UNION SELECT * FROM app.secret")
+
+    def test_multiple_statements_rejected(self):
+        self._rejected("SELECT 1; DROP TABLE app.users")
+
+    def test_into_outfile_rejected(self):
+        self._rejected("SELECT * FROM app.users INTO OUTFILE '/tmp/x'")
+
+    def test_mysql_system_schemas_rejected(self):
+        for schema in ("information_schema", "mysql", "performance_schema", "sys"):
+            with pytest.raises(GuardError):
+                validate(f"SELECT * FROM {schema}.user_privileges", "mysql", self.MYSQL_SELECTED)
+
+    def test_mysql_system_schema_selected_explicitly_is_allowed(self):
+        validate("SELECT * FROM mysql.user", "mysql", ["mysql.user"])
+
+    @pytest.mark.parametrize(
+        "fn",
+        [
+            "LOAD_FILE('/etc/passwd')",
+            "SLEEP(10)",
+            "BENCHMARK(1000000, MD5('x'))",
+            "sys_exec('id')",
+            "sys_eval('id')",
+        ],
+    )
+    def test_mysql_dangerous_functions(self, fn):
+        self._rejected(f"SELECT {fn}")
+
+    def test_postgres_function_name_is_not_mysql_dangerous(self):
+        # pg_* functions do not exist in MySQL: no table, no denied function —
+        # the guard accepts it and the server fails it at runtime.
+        self._ok("SELECT pg_sleep(1)")
+
+    def test_unknown_dialect_rejected(self):
+        with pytest.raises(GuardError):
+            validate("SELECT 1", "oracle", self.MYSQL_SELECTED)

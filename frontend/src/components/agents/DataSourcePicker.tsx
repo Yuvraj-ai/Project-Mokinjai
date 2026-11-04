@@ -9,7 +9,7 @@ import { Checkbox } from '../ui/Controls'
 
 /**
  * Data-source attachment picker (D1, D4): pick connections, then the exact
- * tables the agent may query. Non-postgres kinds are listed but disabled —
+ * tables/collections the agent may query. Kinds without an executor are listed but disabled —
  * "not queryable yet" — until their executor lands.
  */
 
@@ -22,7 +22,7 @@ interface DataSourcePickerProps {
   error?: string
 }
 
-const QUERYABLE_KINDS = new Set(['postgres'])
+const QUERYABLE_KINDS = new Set(['postgres', 'mysql', 'mongodb'])
 
 export default function DataSourcePicker({
   connections,
@@ -76,7 +76,7 @@ export default function DataSourcePicker({
       </div>
 
       <p className="mb-3 text-xs leading-relaxed text-ink-muted">
-        Only the tables you tick here are queryable by this agent — the list is a snapshot, so
+        Only the tables or collections you tick here are queryable by this agent — the list is a snapshot, so
         tables created later need a re-save.
       </p>
       {connections.length === 0 ? (

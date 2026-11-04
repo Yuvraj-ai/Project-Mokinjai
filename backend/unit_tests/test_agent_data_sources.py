@@ -130,14 +130,27 @@ async def test_unknown_connection_is_rejected(
 
 @pytest.mark.asyncio
 async def test_non_queryable_kind_is_rejected(
-    client, test_workspace, auth_headers, profile, mongo_connection
+    client, test_workspace, auth_headers, profile, db_session
 ):
+    # Chroma is the only kind left without an executor (addendum 2026-11-05
+    # made mysql and mongodb queryable).
+    row = ExternalDatabaseConnection(
+        workspace_id=test_workspace.id,
+        name="Vector Store",
+        kind="chromadb",
+        encrypted_uri=encrypt_api_key("http://localhost:8000/api/v1"),
+        collection_name="pages",
+    )
+    db_session.add(row)
+    await db_session.commit()
+    await db_session.refresh(row)
+
     response = await _make_agent(
         client,
         test_workspace,
         auth_headers,
         profile,
-        data_sources=[{"id": mongo_connection.id, "tables": ["docs.pages"]}],
+        data_sources=[{"id": row.id, "tables": ["pages"]}],
     )
     assert response.status_code == 422
     assert "queryable" in response.json()["detail"][0]["msg"]

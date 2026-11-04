@@ -22,13 +22,15 @@ MAX_SQL_BYTES = 100_000
 # COPY as exp.Copy — everything not in this tuple is rejected by type alone.
 _ALLOWED_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 
-# System schemas are refused unless the caller selected them explicitly. They
-# are reachable-by-default in every other MCP-style server; here they are not.
-_SYSTEM_SCHEMAS = ("pg_catalog", "information_schema", "pg_toast")
+# Per-dialect refusals. System schemas are refused unless the caller selected
+# them explicitly (they are reachable-by-default in every other MCP-style
+# server; here they are not). Function denylists are a floor, not an
+# exhaustive list — the root causes (file reads, cross-database reach,
+# server-state mutation, denial of service) are what each name stands for.
+_POSTGRES_SYSTEM_SCHEMAS = ("pg_catalog", "information_schema", "pg_toast")
+_MYSQL_SYSTEM_SCHEMAS = ("information_schema", "mysql", "performance_schema", "sys")
 
-# Host-side functions that read files, reach other databases, or mutate server
-# state. Root-cause check, not an exhaustive list — the denylist is a floor.
-_DANGEROUS_FUNCTIONS = (
+_POSTGRES_DANGEROUS_FUNCTIONS = (
     "pg_read_file",
     "pg_read_binary_file",
     "pg_ls_dir",
@@ -39,6 +41,22 @@ _DANGEROUS_FUNCTIONS = (
     "pg_terminate_backend",
     "pg_cancel_backend",
 )
+_MYSQL_DANGEROUS_FUNCTIONS = (
+    "load_file",
+    "sleep",
+    "benchmark",
+    "sys_exec",
+    "sys_eval",
+)
+
+_SYSTEM_SCHEMAS_BY_DIALECT = {
+    "postgres": _POSTGRES_SYSTEM_SCHEMAS,
+    "mysql": _MYSQL_SYSTEM_SCHEMAS,
+}
+_DANGEROUS_FUNCTIONS_BY_DIALECT = {
+    "postgres": _POSTGRES_DANGEROUS_FUNCTIONS,
+    "mysql": _MYSQL_DANGEROUS_FUNCTIONS,
+}
 
 _PLACEHOLDER_RE = re.compile(r"\$\d+\b")
 
@@ -54,6 +72,10 @@ class GuardError(Exception):
 
 def validate(sql: str, dialect: str, allowed_tables: list[str]) -> exp.Expression:
     """Return the parsed statement, or raise GuardError naming the reason."""
+    system_schemas = _SYSTEM_SCHEMAS_BY_DIALECT.get(dialect)
+    dangerous_functions = _DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect)
+    if system_schemas is None or dangerous_functions is None:
+        raise GuardError(f"the dialect {dialect!r} is not supported", sql)
     if not sql or not sql.strip():
         raise GuardError("the query is empty", sql)
     if len(sql.encode("utf-8")) > MAX_SQL_BYTES:
@@ -84,14 +106,14 @@ def validate(sql: str, dialect: str, allowed_tables: list[str]) -> exp.Expressio
 
     for func in expression.find_all(exp.Func):
         for name in _function_names(func):
-            if name in _DANGEROUS_FUNCTIONS:
+            if name in dangerous_functions:
                 raise GuardError(f"the function {name}() is not allowed", sql)
 
     for table in expression.find_all(exp.Table):
         name = table.name
         if name in cte_names:
             continue
-        _check_table(table, allowed, sql)
+        _check_table(table, allowed, sql, system_schemas)
 
     return expression
 
@@ -132,12 +154,15 @@ def _parse_allowed(allowed_tables: list[str]) -> set[tuple[str | None, str]]:
 
 
 def _check_table(
-    table: exp.Table, allowed: set[tuple[str | None, str]], sql: str
+    table: exp.Table,
+    allowed: set[tuple[str | None, str]],
+    sql: str,
+    system_schemas: tuple[str, ...],
 ) -> None:
     name = table.name
     schema = table.db or None
 
-    if schema and schema.lower() in _SYSTEM_SCHEMAS:
+    if schema and schema.lower() in system_schemas:
         if (schema.lower(), name.lower()) not in allowed:
             raise GuardError(f"the system table {schema}.{name} is not allowed", sql)
         return
