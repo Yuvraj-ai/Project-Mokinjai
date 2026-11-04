@@ -53,17 +53,21 @@ async def list_workspaces(
 ):
     logger.debug(f"User {current_user.id} listing workspaces")
     result = await db.execute(
-        select(Workspace)
+        select(Workspace, WorkspaceMember.role)
         .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
         .where(WorkspaceMember.user_id == current_user.id)
     )
-    return result.scalars().all()
+    rows = result.all()
+    return [
+        WorkspaceResponse.model_validate(workspace).model_copy(update={"role": role})
+        for workspace, role in rows
+    ]
 
 
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)
 async def get_workspace(
     workspace_id: str,
-    _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
+    member: WorkspaceMember = Depends(require_workspace_role("viewer")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
@@ -71,7 +75,9 @@ async def get_workspace(
     if workspace is None:
         logger.warning(f"Workspace {workspace_id} not found")
         raise NotFoundException("Workspace")
-    return workspace
+    response = WorkspaceResponse.model_validate(workspace)
+    response.role = member.role
+    return response
 
 
 @router.put("/{workspace_id}", response_model=WorkspaceResponse)

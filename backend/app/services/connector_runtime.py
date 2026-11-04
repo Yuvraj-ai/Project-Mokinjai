@@ -11,11 +11,12 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from app.crypto import decrypt_api_key
 from app.models.connector import ConnectorInstance
+from app.services.agent_tools import TOOL_TIMEOUT_S
 from app.services.connector_catalog import CatalogEntry, get_entry
 
 
@@ -164,4 +165,26 @@ async def load_connector_tools(instances: Sequence[ConnectorInstance]) -> list[B
     for owner, tool in loaded:
         if collisions[tool.name] > 1:
             tool.name = f"{slug(owner)}_{tool.name}"
-    return [tool for _, tool in loaded]
+    return [with_timeout(tool) for _, tool in loaded]
+
+
+def with_timeout(tool: BaseTool) -> BaseTool:
+    """Cap one MCP tool call at the shared tool ceiling.
+
+    An MCP server that never answers otherwise hangs the whole turn — the
+    2026-11-04 hang post-mortem. Preserves the tool's schema so the model
+    sees the identical signature; a tool that is not coroutine-backed is
+    returned unchanged (the MCP adapters always produce coroutines)."""
+    inner = getattr(tool, "coroutine", None)
+    if inner is None:
+        return tool
+
+    async def bounded(**kwargs):
+        return await asyncio.wait_for(inner(**kwargs), timeout=TOOL_TIMEOUT_S)
+
+    return StructuredTool(
+        name=tool.name,
+        description=tool.description,
+        args_schema=tool.args_schema,
+        coroutine=bounded,
+    )

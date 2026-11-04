@@ -13,6 +13,7 @@ interface ThreadPaneProps {
   workspaceId: string | null
   session: PlaygroundSession | null
   messages: PlaygroundMessage[]
+  readOnly: boolean
   onTurnEnded: () => void
 }
 
@@ -37,6 +38,20 @@ function fromPersisted(message: PlaygroundMessage): RenderedAssistant {
   }
 }
 
+/**
+ * One card per tool call, not two: the start and end events share a run id,
+ * so the end event (result/error + duration) replaces its start ("Calling…")
+ * and a start with no end yet stays live. Files-staged events pass through.
+ */
+function collapseEvents(events: ActivityEvent[]): ActivityEvent[] {
+  const ended = new Set(
+    events.filter((event) => event.type === 'tool_end').map((event) => event.id)
+  )
+  return events.filter(
+    (event) => event.type !== 'tool_start' || !ended.has(event.id)
+  )
+}
+
 function AssistantTurn({
   turn,
   streaming,
@@ -44,11 +59,12 @@ function AssistantTurn({
   turn: RenderedAssistant
   streaming: boolean
 }) {
+  const events = collapseEvents(turn.events)
   return (
     <div className="flex max-w-[85%] flex-col">
       {turn.reasoning && <ThinkingCard reasoning={turn.reasoning} live={streaming && !turn.content} />}
-      {turn.events.map((event, index) => (
-        <ActivityCard key={event.id ?? `${event.type}-${index}`} event={event} />
+      {events.map((event, index) => (
+        <ActivityCard key={`${event.type}-${event.id ?? index}`} event={event} />
       ))}
       {turn.content ? (
         <p className="whitespace-pre-wrap px-1 py-1 text-[13px] text-ink">{turn.content}</p>
@@ -79,6 +95,7 @@ export default function ThreadPane({
   workspaceId,
   session,
   messages,
+  readOnly,
   onTurnEnded,
 }: ThreadPaneProps) {
   const [input, setInput] = useState('')
@@ -93,6 +110,16 @@ export default function ThreadPane({
   }, [messages, inflight])
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  // Switching sessions must not inherit the previous thread's in-flight
+  // turn, draft or error banner.
+  useEffect(() => {
+    abortRef.current?.abort()
+    setInflight(null)
+    setError(null)
+    setInput('')
+    setSending(false)
+  }, [session?.id])
 
   const send = async () => {
     const content = input.trim()
@@ -215,7 +242,11 @@ export default function ThreadPane({
               }
             }}
             placeholder={
-              session ? `Message ${session.title}…` : 'Select a session to chat…'
+              readOnly
+                ? 'Viewers can read but not chat.'
+                : session
+                  ? `Message ${session.title}…`
+                  : 'Select a session to chat…'
             }
             className="flex-1 resize-none rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
           />
@@ -229,7 +260,7 @@ export default function ThreadPane({
           ) : (
             <button
               onClick={() => void send()}
-              disabled={!input.trim() || !session}
+              disabled={readOnly || !input.trim() || !session}
               className="flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-[12.5px] text-primary-fg disabled:opacity-50"
             >
               <Send className="h-3 w-3" aria-hidden /> Send

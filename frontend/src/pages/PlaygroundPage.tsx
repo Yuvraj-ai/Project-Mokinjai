@@ -18,6 +18,7 @@ import ThreadPane from '../components/playground/ThreadPane'
 export default function PlaygroundPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [role, setRole] = useState<string>('viewer')
   const [agents, setAgents] = useState<AgentListItem[]>([])
   const [sessions, setSessions] = useState<PlaygroundSession[]>([])
   const [messages, setMessages] = useState<PlaygroundMessage[]>([])
@@ -31,10 +32,15 @@ export default function PlaygroundPage() {
   useEffect(() => {
     listWorkspaces()
       .then((workspaces) => {
-        if (workspaces.length > 0) setWorkspaceId(workspaces[0].id)
+        if (workspaces.length > 0) {
+          setWorkspaceId(workspaces[0].id)
+          setRole(workspaces[0].role ?? 'viewer')
+        }
       })
       .catch(() => setError('Could not load workspaces.'))
   }, [])
+
+  const readOnly = role === 'viewer'
 
   useEffect(() => {
     if (!workspaceId) return
@@ -159,6 +165,7 @@ export default function PlaygroundPage() {
         sessions={sessions}
         selectedId={sessionId}
         busy={busy}
+        readOnly={readOnly}
         onSelect={(id) => agentId && setSearchParams({ agent: agentId, session: id })}
         onCreate={() => void handleCreate()}
         onRename={(id, title) => void handleRename(id, title)}
@@ -174,6 +181,7 @@ export default function PlaygroundPage() {
           workspaceId={workspaceId}
           session={activeSession}
           messages={messages}
+          readOnly={readOnly}
           onTurnEnded={handleTurnEnded}
         />
       </div>

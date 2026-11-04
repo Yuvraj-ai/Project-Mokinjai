@@ -35,6 +35,12 @@ _PYTHON_TYPE: dict[str, Any] = {
     "any": Any,
 }
 
+# A tool call must not hang the run forever: an unreachable MCP server or a
+# wedged sandbox otherwise blocks the turn until the client gives up. The
+# data-source tools carry their own database timeouts, so this is the ceiling
+# for everything else.
+TOOL_TIMEOUT_S = 60.0
+
 
 class SubagentInput(BaseModel):
     task: str = Field(
@@ -49,7 +55,13 @@ def user_tool(schema: ToolSchema, session: SandboxSession) -> BaseTool:
         # An optional parameter the model left out must not become None: the
         # user's function may not accept an explicit None for it.
         supplied = {key: value for key, value in kwargs.items() if value is not None}
-        result = await asyncio.to_thread(session.execute_tool, schema.name, supplied)
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(session.execute_tool, schema.name, supplied),
+                timeout=TOOL_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            return f"Tool error (timeout): '{schema.name}' did not finish within {TOOL_TIMEOUT_S:g}s."
         if result.error is not None:
             return f"Tool error ({result.error.kind}): {result.error.message}"
         return json.dumps(
@@ -82,7 +94,21 @@ def sandbox_python_tool(session: SandboxSession, filenames: list[str]) -> BaseTo
     mounted = ", ".join(filenames) if filenames else "none"
 
     async def execute_python(code: str) -> str:
-        result = await asyncio.to_thread(session.execute_python, code)
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(session.execute_python, code),
+                timeout=TOOL_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            return json.dumps(
+                {
+                    "stdout": "",
+                    "stderr": f"timed out after {TOOL_TIMEOUT_S:g}s",
+                    "ok": False,
+                    "error": "timeout",
+                    "files": [],
+                }
+            )
         return json.dumps(
             {
                 "stdout": _truncate(result.stdout),
@@ -203,9 +229,12 @@ def query_data_source_tool(
         except BlockedHostError as exc:
             return f"Connection refused: {exc}"
         try:
-            result = await run(
-                uri, sql, tables, agent_id=agent_id, connection_id=connection.id
+            result = await asyncio.wait_for(
+                run(uri, sql, tables, agent_id=agent_id, connection_id=connection.id),
+                timeout=TOOL_TIMEOUT_S,
             )
+        except asyncio.TimeoutError:
+            return f"Query failed: the query timed out after {TOOL_TIMEOUT_S:g}s."
         except GuardError as exc:
             return f"Query refused: {exc.reason}"
         except DataSourceError as exc:

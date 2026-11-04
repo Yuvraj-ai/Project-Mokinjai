@@ -42,6 +42,8 @@ export interface Workspace {
   id: string
   name: string
   owner_id: string
+  /** The caller's membership role (owner/admin/editor/viewer) from the API. */
+  role?: string | null
   created_at: string
   updated_at: string
 }

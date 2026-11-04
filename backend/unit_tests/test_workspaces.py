@@ -25,6 +25,13 @@ class TestListWorkspaces:
         assert len(data) >= 1
 
     @pytest.mark.asyncio
+    async def test_list_carries_the_callers_role(self, client, viewer_headers, test_workspace):
+        response = await client.get("/api/workspaces", headers=viewer_headers)
+        assert response.status_code == 200
+        mine = next(w for w in response.json() if w["id"] == test_workspace.id)
+        assert mine["role"] == "viewer"
+
+    @pytest.mark.asyncio
     async def test_list_workspaces_empty(self, client, auth_headers):
         response = await client.get("/api/workspaces", headers=auth_headers)
         assert response.status_code == 200

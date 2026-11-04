@@ -8,6 +8,7 @@ interface SessionPaneProps {
   sessions: PlaygroundSession[]
   selectedId: string | null
   busy: boolean
+  readOnly: boolean
   onSelect: (sessionId: string) => void
   onCreate: () => void
   onRename: (sessionId: string, title: string) => void
@@ -30,6 +31,7 @@ export default function SessionPane({
   sessions,
   selectedId,
   busy,
+  readOnly,
   onSelect,
   onCreate,
   onRename,
@@ -53,14 +55,16 @@ export default function SessionPane({
         <p className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
           {agentName}
         </p>
-        <button
-          onClick={onCreate}
-          disabled={busy}
-          title="New session"
-          className="flex h-6 w-6 items-center justify-center rounded-md text-ink-muted hover:bg-surface-muted hover:text-ink disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-        </button>
+        {!readOnly && (
+          <button
+            onClick={onCreate}
+            disabled={busy}
+            title="New session"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-ink-muted hover:bg-surface-muted hover:text-ink disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+          </button>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto pb-3">
         {sessions.length === 0 && (
@@ -126,23 +130,27 @@ export default function SessionPane({
                   </span>
                 </button>
                 <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-                  <button
-                    onClick={() => {
-                      setEditing(session.id)
-                      setDraft(session.title)
-                    }}
-                    className="text-ink-subtle hover:text-ink"
-                    title="Rename"
-                  >
-                    <Pencil className="h-3 w-3" aria-hidden />
-                  </button>
-                  <button
-                    onClick={() => setConfirming(session.id)}
-                    className="text-ink-subtle hover:text-status-error"
-                    title="Delete session"
-                  >
-                    <Trash2 className="h-3 w-3" aria-hidden />
-                  </button>
+                  {!readOnly && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditing(session.id)
+                          setDraft(session.title)
+                        }}
+                        className="text-ink-subtle hover:text-ink"
+                        title="Rename"
+                      >
+                        <Pencil className="h-3 w-3" aria-hidden />
+                      </button>
+                      <button
+                        onClick={() => setConfirming(session.id)}
+                        className="text-ink-subtle hover:text-status-error"
+                        title="Delete session"
+                      >
+                        <Trash2 className="h-3 w-3" aria-hidden />
+                      </button>
+                    </>
+                  )}
                 </span>
               </>
             )}

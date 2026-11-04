@@ -14,6 +14,10 @@ class WorkspaceResponse(BaseModel):
     id: str
     name: str
     owner_id: str
+    # The caller's membership role, so the frontend can hide write affordances
+    # (the playground composer, delete buttons) from viewers instead of
+    # letting them hit a 403.
+    role: str | None = None
     created_at: datetime
     updated_at: datetime
 

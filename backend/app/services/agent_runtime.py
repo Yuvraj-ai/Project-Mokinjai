@@ -822,6 +822,8 @@ async def stream_turn(
 
     except (asyncio.CancelledError, GeneratorExit):
         # Stop button (P8): whatever streamed so far stays, marked stopped.
+        # A disconnect before the rows were even created must still cancel the
+        # execution — otherwise the row is stuck at "running" forever.
         if assistant_message_id is not None:
             partial = "".join(content_parts)
             await _write_assistant_message(
@@ -834,7 +836,7 @@ async def stream_turn(
                 usage=usage,
                 cost=None,
             )
-            await _mark_execution(execution_id, "cancelled", started=started)
+        await _mark_execution(execution_id, "cancelled", started=started)
         raise
 
     except CompositionError as exc:
