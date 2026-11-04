@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { NavLink } from 'react-router-dom'
-import { GitBranch, Play, FileText, Bot, Braces, FolderOpen, Database, BookOpen, Wrench, Plug, Cpu, MessagesSquare } from 'lucide-react'
+import { GitBranch, Play, FileText, Bot, Braces, FolderOpen, Database, BookOpen, Wrench, Plug, Cpu, MessagesSquare, KeyRound } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 const navItems = [
@@ -16,6 +16,7 @@ const navItems = [
   { to: '/llms', label: 'LLMs', icon: Cpu },
   { to: '/tools', label: 'Tools', icon: Wrench },
   { to: '/connectors', label: 'Connectors', icon: Plug },
+  { to: '/api-keys', label: 'API Keys', icon: KeyRound },
 ]
 
 const navSections = [

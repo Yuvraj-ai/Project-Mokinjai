@@ -13,6 +13,8 @@ import ToolsPage from './pages/ToolsPage'
 import ConnectorsPage from './pages/ConnectorsPage'
 import AgentsPage from './pages/AgentsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
+import ApiKeysPage from './pages/ApiKeysPage'
+import ApiKeysDetailPage from './pages/ApiKeysDetailPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -24,6 +26,8 @@ export default function App() {
         <Route path="/" element={<Navigate to="/workflows" replace />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/playground" element={<PlaygroundPage />} />
+        <Route path="/api-keys" element={<ApiKeysPage />} />
+        <Route path="/api-keys/:keyId" element={<ApiKeysDetailPage />} />
         <Route path="/workflows" element={<DashboardPage />} />
         <Route path="/workflows/:workflowId/edit" element={<WorkflowEditorPage />} />
         <Route path="/executions" element={<ExecutionHistoryPage />} />

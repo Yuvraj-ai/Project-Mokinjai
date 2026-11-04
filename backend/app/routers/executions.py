@@ -76,6 +76,7 @@ async def list_executions(
     _member: WorkspaceMember = Depends(require_workspace_role("viewer")),
     db: AsyncSession = Depends(get_db),
     workflow_id: str | None = None,
+    api_key_id: str | None = None,
     status: str | None = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -84,10 +85,16 @@ async def list_executions(
     query = select(Execution).where(Execution.workspace_id == workspace_id)
     count_query = select(func.count()).select_from(Execution).where(Execution.workspace_id == workspace_id)
 
-    # Agent chat runs live in the Playground now; this list is workflow history.
-    # (spec 2026-11-03-playground P9 — closes ROADMAP §6.4)
-    query = query.where(Execution.workflow_id.isnot(None))
-    count_query = count_query.where(Execution.workflow_id.isnot(None))
+    if api_key_id:
+        # Per-key logs (the API-keys detail page): the caller wants this key's
+        # runs — workflow and chat rows alike — so the workflow filter is off.
+        query = query.where(Execution.api_key_id == api_key_id)
+        count_query = count_query.where(Execution.api_key_id == api_key_id)
+    else:
+        # Agent chat runs live in the Playground now; this list is workflow
+        # history. (spec 2026-11-03-playground P9 — closes ROADMAP §6.4)
+        query = query.where(Execution.workflow_id.isnot(None))
+        count_query = count_query.where(Execution.workflow_id.isnot(None))
 
     if workflow_id:
         query = query.where(Execution.workflow_id == workflow_id)
