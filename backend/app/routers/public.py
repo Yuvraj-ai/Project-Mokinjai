@@ -27,9 +27,24 @@ from app.models.chat import ChatMessage, ChatSession
 from app.models.execution import Execution
 from app.services.agent_composition import CompositionError, saved_input, validate_agent
 from app.services.agent_runtime import stream_turn
+from app.services.public_limits import check_credit, check_rate_limit
 from app.utils.errors import NotFoundException
 
 router = APIRouter()
+
+
+async def enforce_limits(
+    request: Request,
+    key: ApiKey = Depends(get_api_key),
+    db: AsyncSession = Depends(get_db),
+) -> ApiKey:
+    """Credit limit, then rate limit — both before any model call. The
+    rate-limit headers ride on the response via request.state."""
+    await check_credit(db, key)
+    headers = check_rate_limit(key.id)
+    if headers:
+        request.state.rate_headers = headers
+    return key
 
 
 class PublicChatRequest(BaseModel):
@@ -135,7 +150,7 @@ async def _load_agent(db: AsyncSession, key: ApiKey, session: ChatSession) -> Ag
 async def public_chat(
     body: PublicChatRequest,
     request: Request,
-    key: ApiKey = Depends(get_api_key),
+    key: ApiKey = Depends(enforce_limits),
     db: AsyncSession = Depends(get_db),
 ):
     session = await _resolve_conversation(db, key, body)

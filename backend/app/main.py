@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -178,10 +179,23 @@ async def public_auth_error_handler(request: Request, exc: PublicAuthError):
         "invalid_request": 400,
     }
     status = status_by_code.get(exc.code, 400)
+    headers = {}
+    if exc.code == "rate_limit_exceeded":
+        # Seconds until the next fixed window starts.
+        headers["Retry-After"] = str(60 - (datetime.now(timezone.utc).second))
     return JSONResponse(
         status_code=status,
+        headers=headers,
         content=public_error_response(exc.code, exc.message, status, f"req_{uuid.uuid4().hex[:16]}")["body"],
     )
+
+
+@public_app.middleware("http")
+async def attach_rate_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in getattr(request.state, "rate_headers", {}).items():
+        response.headers[name] = value
+    return response
 
 
 @public_app.exception_handler(AppException)

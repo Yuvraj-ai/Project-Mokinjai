@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 
+    # Public /v1 surface
+    PUBLIC_API_RATE_LIMIT_PER_MINUTE: int = 60
+
     # JWT
     JWT_SECRET_KEY: str = "your-super-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
