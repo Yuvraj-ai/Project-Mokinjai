@@ -121,7 +121,7 @@ export default function ApiKeysDetailPage() {
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="mx-auto max-w-4xl">
-        <Link to="/api-keys" className="flex items-center gap-1 text-[12px] text-ink-subtle hover:text-ink">
+        <Link to="/keys" className="flex items-center gap-1 text-[12px] text-ink-subtle hover:text-ink">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> API keys
         </Link>
 
@@ -311,7 +311,7 @@ export default function ApiKeysDetailPage() {
               onClick={() => {
                 if (confirmDelete) {
                   void act(() => revokeApiKey(workspaceId!, keyId!)).then(() => {
-                    window.location.href = '/api-keys'
+                    window.location.href = '/keys'
                   })
                 } else {
                   setConfirmDelete(true)

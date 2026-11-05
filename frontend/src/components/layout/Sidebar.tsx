@@ -16,7 +16,7 @@ const navItems = [
   { to: '/llms', label: 'LLMs', icon: Cpu },
   { to: '/tools', label: 'Tools', icon: Wrench },
   { to: '/connectors', label: 'Connectors', icon: Plug },
-  { to: '/api-keys', label: 'API Keys', icon: KeyRound },
+  { to: '/keys', label: 'API Keys', icon: KeyRound },
 ]
 
 const navSections = [

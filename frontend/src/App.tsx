@@ -26,8 +26,8 @@ export default function App() {
         <Route path="/" element={<Navigate to="/workflows" replace />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/playground" element={<PlaygroundPage />} />
-        <Route path="/api-keys" element={<ApiKeysPage />} />
-        <Route path="/api-keys/:keyId" element={<ApiKeysDetailPage />} />
+        <Route path="/keys" element={<ApiKeysPage />} />
+        <Route path="/keys/:keyId" element={<ApiKeysDetailPage />} />
         <Route path="/workflows" element={<DashboardPage />} />
         <Route path="/workflows/:workflowId/edit" element={<WorkflowEditorPage />} />
         <Route path="/executions" element={<ExecutionHistoryPage />} />

@@ -276,7 +276,7 @@ export default function ApiKeysPage() {
                   <tr key={key.id} className="border-b border-line last:border-0">
                     <td className="px-4 py-3">
                       <Link
-                        to={`/api-keys/${key.id}`}
+                        to={`/keys/${key.id}`}
                         className="text-[13px] font-medium text-ink hover:underline"
                       >
                         {key.name}
@@ -312,7 +312,7 @@ export default function ApiKeysPage() {
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => navigate(`/api-keys/${key.id}`)}
+                        onClick={() => navigate(`/keys/${key.id}`)}
                         className="text-ink-subtle hover:text-ink"
                         title="Configure"
                       >
