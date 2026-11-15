@@ -214,8 +214,17 @@ This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker,
 ## Usage
 
 1. **Login** at http://localhost:5173/login (or use Admin OTP via Telegram)
-2. **Create a workflow** from the dashboard by clicking "New Workflow"
-3. **Build your pipeline** by dragging modules from the left sidebar onto the canvas:
+2. **Build an agent** — open **Agents** and click **New agent**. Give it an LLM profile, system prompt, structured output, tools, skills, connectors, files, and data sources from the sidebar.
+3. **Test it** — open the agent in **Playground** and chat with it.
+4. **Expose it** — create a key under **API Keys**, then call the agent from an external app with `Authorization: Bearer mk_...` against `POST /v1/chat` (the `agent_id` is named per request; the key's workspace is the boundary).
+5. **Toggle dark mode** using the sun/moon icon in the navbar
+
+### Legacy workflow canvas
+
+The original drag-and-drop canvas still runs from **Workflows**:
+
+1. **Create a workflow** from the dashboard by clicking "New Workflow"
+2. **Build your pipeline** by dragging modules from the left sidebar onto the canvas:
    - **Input** — Entry point for your workflow data
    - **Prompt** — Template with `{variable}` substitution
    - **Agent** — LLM call (select provider: OpenAI, Anthropic, or Gemini)
@@ -223,14 +232,12 @@ This starts all services: PostgreSQL, Redis, Backend (port 8001), Celery worker,
    - **Conditional** — Branch logic (contains, equals, regex, greater/less than)
    - **Transform** — Data manipulation (JSON parse, extract field, uppercase, split, etc.)
    - **HTTP Request** — External API calls
-   - **Knowledge Base** — RAG-based document retrieval
-4. **Connect nodes** by dragging from output handles to input handles
-5. **Configure nodes** by clicking them to open the properties panel
-6. **Save** your workflow with the Save button
-7. **Run** with the Run button and watch execution progress in real-time
-8. **Rename workflows** by clicking the name in the toolbar or using the card menu
-9. **Manage System Prompts** — Navigate to "System Prompts" in the sidebar to create, edit, and reuse prompts across workflows
-10. **Toggle dark mode** using the sun/moon icon in the navbar
+   - **Knowledge Base** — RAG retrieval (canvas node only; not registered in the backend engine)
+3. **Connect nodes** by dragging from output handles to input handles
+4. **Configure nodes** by clicking them to open the properties panel
+5. **Save** your workflow with the Save button
+6. **Run** with the Run button and watch execution progress in real-time
+7. **Rename workflows** by clicking the name in the toolbar or using the card menu
 
 ## API Endpoints
 

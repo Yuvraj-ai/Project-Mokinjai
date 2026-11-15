@@ -124,13 +124,17 @@ def _reasoning_delta(chunk: Any) -> str:
 
 def _cap(value: Any, limit: int = ACTIVITY_VALUE_CAP) -> Any:
     """Bound a persisted/streamed value: past the limit, keep a truncated
-    prefix — parsed back when it still parses, as text otherwise."""
+    prefix — parsed back when it still parses, as text otherwise.
+
+    Always returns plain JSON types: the result is stored in a JSONB column
+    whose serializer has no `default`, so a live LangChain object (ToolMessage)
+    must never leak through unchanged."""
     try:
         serialized = json.dumps(value, default=str)
     except (TypeError, ValueError):
         return _cap(str(value), limit)
     if len(serialized) <= limit:
-        return value
+        return json.loads(serialized)
     truncated = serialized[:limit] + _TRUNCATION_MARKER
     try:
         return json.loads(truncated)

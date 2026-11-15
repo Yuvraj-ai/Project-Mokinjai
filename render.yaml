@@ -1,0 +1,54 @@
+# Render Blueprint — test deployment.
+# Runbook and the values you must fill in by hand: docs/guides/deploy-render.md
+# (local-only — docs/ is gitignored). All compute resources share one region.
+
+databases:
+  - name: mokinjay-db
+    databaseName: mokinjay
+    user: mokinjay
+    plan: free # expires 30 days after creation; upgrade to basic-256mb to keep it
+    region: singapore
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: mokinjay-api
+    runtime: python
+    plan: free # 0.1 CPU / 512 MB, spins down after 15 minutes idle
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Render injects $PORT; the Dockerfile's hardcoded 8001 is not used here.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Inline opt-in keeps the Alembic safety rail intact for every other process.
+    preDeployCommand: ALLOW_REMOTE_MIGRATIONS=1 python -m alembic upgrade head
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        sync: false # paste the Internal Database URL with the postgresql+asyncpg:// scheme
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: LLM_ENCRYPTION_KEY
+        sync: false # must be a real Fernet key, not a generated random string
+      - key: FRONTEND_URL
+        sync: false # https://mokinjay-web.onrender.com — the CORS origin
+      - key: SANDBOX_BACKEND
+        value: auto # no Docker daemon on Render; falls back to subprocess
+
+  - type: web
+    name: mokinjay-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: VITE_API_URL
+        sync: false # https://mokinjay-api.onrender.com — baked in at build time
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

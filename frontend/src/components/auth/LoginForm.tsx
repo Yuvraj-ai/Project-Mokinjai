@@ -107,7 +107,16 @@ export default function LoginForm() {
 
       <p className="mt-8 text-center text-xs text-ink-subtle animate-fade-in-up stagger-5">
         Don&apos;t have an account?{' '}
-        <span className="text-ink-muted">Contact an admin</span>
+        <a
+          href={`mailto:yuvrajsingh.tech@protonmail.com?subject=${encodeURIComponent(
+            '[Mokinjay] Account Access Request'
+          )}&body=${encodeURIComponent(
+            'Hello Admin,\n\nI would like to request an account to access the Mokinjay workspace.\n\nDetails:\n- Full Name: \n- Requested Email: \n- Organization / Team: \n- Reason / Use Case: \n\nThank you!'
+          )}`}
+          className="text-ink-muted hover:text-ink underline underline-offset-2 transition-colors"
+        >
+          Contact an admin
+        </a>
       </p>
     </div>
   )

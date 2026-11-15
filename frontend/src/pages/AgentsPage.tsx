@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Bot, MessagesSquare, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Bot, Plus } from 'lucide-react'
 import { listWorkspaces } from '../api/workspaces'
 import {
   deleteAgent,
@@ -12,10 +11,11 @@ import {
   type AgentListItem,
   type AgentOptions,
 } from '../api/agents'
+import AgentCard from '../components/agents/AgentCard'
 import AgentConfigDialog from '../components/agents/AgentConfigDialog'
 import AgentCreateDialog from '../components/agents/AgentCreateDialog'
 import Button from '../components/ui/Button'
-import { Spinner } from '../components/ui/Feedback'
+import { Spinner, EmptyState, Callout } from '../components/ui/Feedback'
 
 interface Draft {
   agent: Agent | null
@@ -33,7 +33,6 @@ export default function AgentsPage() {
   const [options, setOptions] = useState<AgentOptions | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
-  const navigate = useNavigate()
 
   const refresh = useCallback(async (id: string) => {
     setAgents(await listAgents(id))
@@ -45,20 +44,26 @@ export default function AgentsPage() {
         if (!workspaces?.length) return
         const id = workspaces[0].id
         setWorkspaceId(id)
-        setAgents(await listAgents(id))
+        const [loadedAgents, loadedOptions] = await Promise.all([
+          listAgents(id),
+          getAgentOptions(id).catch(() => null),
+        ])
+        setAgents(loadedAgents)
+        if (loadedOptions) setOptions(loadedOptions)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  const groups = useMemo(() => {
-    const byLetter = new Map<string, AgentListItem[]>()
-    for (const agent of [...agents].sort((a, b) => a.name.localeCompare(b.name))) {
-      const letter = (agent.name[0] ?? '#').toUpperCase()
-      byLetter.set(letter, [...(byLetter.get(letter) ?? []), agent])
+  const llmProfileMap = useMemo(() => {
+    const map = new Map<string, string>()
+    if (options?.llm_profiles) {
+      for (const p of options.llm_profiles) {
+        map.set(p.id, p.name)
+      }
     }
-    return [...byLetter.entries()]
-  }, [agents])
+    return map
+  }, [options])
 
   const openNew = () => {
     setError(null)
@@ -72,7 +77,8 @@ export default function AgentsPage() {
     setBusy(true)
     setError(null)
     try {
-      setOptions(await getAgentOptions(workspaceId))
+      const loaded = options ?? (await getAgentOptions(workspaceId))
+      setOptions(loaded)
       setDraft({ agent: null, name, description })
     } catch {
       setError('Could not load the agent options.')
@@ -104,7 +110,7 @@ export default function AgentsPage() {
 
   const remove = async (item: AgentListItem) => {
     if (!workspaceId) return
-    if (!window.confirm(`Delete “${item.name}”? This cannot be undone.`)) return
+    if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return
     setError(null)
     setBanner(null)
     try {
@@ -118,142 +124,97 @@ export default function AgentsPage() {
   if (loading || !workspaceId) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Spinner />
+        <Spinner className="w-6 h-6" />
       </div>
     )
   }
 
   return (
-    <div className="flex h-full">
-      <aside className="w-80 shrink-0 overflow-y-auto border-r border-line bg-surface p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <Bot className="h-4 w-4" /> Agents
-          </h1>
-          <Button size="sm" disabled={busy} onClick={() => void openNew()}>
-            <Plus className="h-3.5 w-3.5" /> New
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-6xl mx-auto px-8 py-10">
+        <div className="flex items-start justify-between mb-8 animate-fade-in-up stagger-1">
+          <div>
+            <h1 className="text-2xl font-semibold text-ink tracking-tight leading-tight flex items-center gap-2.5">
+              <Bot className="w-6 h-6" aria-hidden />
+              Agents
+              <span className="font-mono text-xs font-normal text-ink-subtle ml-1">
+                {agents.length}
+              </span>
+            </h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              Configure autonomous AI agents with specialized prompts, skills, and tools.
+            </p>
+          </div>
+          <Button disabled={busy} onClick={() => void openNew()}>
+            <Plus className="w-4 h-4" aria-hidden /> New Agent
           </Button>
         </div>
 
         {banner && (
-          <p className="mb-3 rounded-lg bg-surface-muted px-2.5 py-1.5 text-xs text-ink-muted">
-            {banner}
-          </p>
+          <div className="mb-6 animate-fade-in">
+            <Callout tone="danger">{banner}</Callout>
+          </div>
         )}
         {error && (
-          <p className="mb-3 rounded-lg bg-status-error-soft px-2.5 py-1.5 text-xs text-status-error">
-            {error}
-          </p>
-        )}
-
-        {groups.map(([letter, items]) => (
-          <div key={letter} className="mb-3">
-            <p className="mb-1 px-1 font-mono text-[10px] uppercase tracking-wider text-ink-subtle">
-              {letter}
-            </p>
-            <ul className="space-y-0.5">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className={`group rounded-lg px-2 py-1.5 transition-colors duration-150 ${
-                    'hover:bg-surface-muted'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void openExisting(item)}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate text-xs font-medium text-ink">
-                          {item.name}
-                        </span>
-                        <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                            item.status === 'ready' ? 'bg-status-success' : 'bg-status-warning'
-                          }`}
-                          title={item.status === 'ready' ? 'Ready' : 'Needs attention'}
-                        />
-                      </span>
-                      {item.description && (
-                        <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
-                          {item.description}
-                        </span>
-                      )}
-                    </button>
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                      <button
-                        type="button"
-                        title="Configure"
-                        onClick={() => void openExisting(item)}
-                        className="rounded p-1 text-ink-subtle hover:bg-surface-muted hover:text-ink"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Chat in the Playground"
-                        onClick={() => navigate(`/playground?agent=${item.id}`)}
-                        className="rounded p-1 text-ink-subtle hover:bg-surface-muted hover:text-ink"
-                      >
-                        <MessagesSquare className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete"
-                        onClick={() => void remove(item)}
-                        className="rounded p-1 text-ink-subtle hover:bg-status-error-soft hover:text-status-error"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          <div className="mb-6 animate-fade-in">
+            <Callout tone="danger">{error}</Callout>
           </div>
-        ))}
-
-        {agents.length === 0 && (
-          <p className="px-1 text-xs text-ink-subtle">
-            No agents yet. Create one to give a model a prompt, skills and tools.
-          </p>
         )}
-      </aside>
 
-      <section className="flex-1 overflow-hidden">
-        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-ink-subtle">
-          Open an agent to configure it, or press the chat icon to run it in the Playground.
-        </div>
-      </section>
+        {agents.length === 0 ? (
+          <div className="bg-surface border border-line rounded-xl animate-fade-in">
+            <EmptyState
+              icon={Bot}
+              title="No agents yet"
+              description="Create an agent to give a model a prompt, skills, and tools."
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {agents.map((agent, index) => (
+              <div
+                key={agent.id}
+                className={`animate-fade-in-up stagger-${Math.min(index + 1, 8)}`}
+              >
+                <AgentCard
+                  agent={agent}
+                  llmProfileName={agent.llm_profile_id ? llmProfileMap.get(agent.llm_profile_id) : undefined}
+                  onClick={() => void openExisting(agent)}
+                  onDelete={() => void remove(agent)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
-      {creating && (
-        <AgentCreateDialog
-          onClose={() => setCreating(false)}
-          onContinue={(name, description) => void startDraft(name, description)}
-        />
-      )}
+        {creating && (
+          <AgentCreateDialog
+            onClose={() => setCreating(false)}
+            onContinue={(name, description) => void startDraft(name, description)}
+          />
+        )}
 
-      {draft && options && (
-        <AgentConfigDialog
-          workspaceId={workspaceId}
-          options={options}
-          agent={draft.agent}
-          initialName={draft.name}
-          initialDescription={draft.description}
-          onClose={closeDraft}
-          onSaved={(saved) => {
-            setDraft({ agent: saved, name: saved.name, description: saved.description ?? '' })
-            void refresh(workspaceId)
-            void getAgentOptions(workspaceId, saved.id).then(setOptions).catch(() => {})
-          }}
-          onDeleted={(agentId) => {
-            setDraft(null)
-            void refresh(workspaceId)
-          }}
-        />
-      )}
+        {draft && options && (
+          <AgentConfigDialog
+            workspaceId={workspaceId}
+            options={options}
+            agent={draft.agent}
+            initialName={draft.name}
+            initialDescription={draft.description}
+            onClose={closeDraft}
+            onSaved={(saved) => {
+              setDraft({ agent: saved, name: saved.name, description: saved.description ?? '' })
+              void refresh(workspaceId)
+              void getAgentOptions(workspaceId, saved.id).then(setOptions).catch(() => {})
+            }}
+            onDeleted={() => {
+              setDraft(null)
+              void refresh(workspaceId)
+            }}
+          />
+        )}
+      </div>
     </div>
   )
 }
+

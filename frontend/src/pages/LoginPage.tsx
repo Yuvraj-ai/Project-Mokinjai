@@ -13,35 +13,43 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-canvas flex">
       {/* Left: brand panel (stays dark in both themes) */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-[#141414] border-r border-line flex-col overflow-hidden">
-        <div className="relative z-10 flex flex-col justify-center px-16 xl:px-24">
-          <p className="text-[#A8A49C] text-xs font-mono tracking-[0.25em] uppercase mb-8 animate-fade-in">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-[#262334] border-r border-line flex-col justify-end p-12 xl:p-16 overflow-hidden">
+        {/* Mokinjay Dither Illustration fitting full height without getting cut */}
+        <div className="absolute inset-0 flex items-center justify-center select-none pointer-events-none">
+          <img
+            src="/ditther-1794604960622.png"
+            alt="Mokinjay Illustration"
+            className="w-full h-full object-contain"
+            style={{
+              maskImage:
+                'linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 3%, black 97%, transparent 100%)',
+              WebkitMaskImage:
+                'linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 3%, black 97%, transparent 100%)',
+              maskComposite: 'intersect',
+              WebkitMaskComposite: 'destination-in',
+            }}
+          />
+        </div>
+
+        {/* Text moved to bottom left */}
+        <div className="relative z-10 flex flex-col justify-end pt-2">
+          <p className="text-[#A8A49C] text-xs font-mono tracking-[0.25em] uppercase mb-3 animate-fade-in">
             Intelligent Automation
           </p>
-          <h1 className="text-6xl xl:text-7xl font-semibold text-[#FFFFFF] leading-[1.02] tracking-tight mb-8 animate-fade-in-up stagger-1">
+          <h1 className="text-4xl xl:text-5xl font-semibold text-[#FFFFFF] leading-[1.05] tracking-tight mb-4 animate-fade-in-up stagger-1">
             Mokinjay
           </h1>
-          <div className="h-px w-24 bg-[#FFFFFF]/20 mb-8 animate-fade-in-up stagger-2" />
-          <p className="text-[#FFFFFF]/60 text-lg max-w-md leading-relaxed animate-fade-in-up stagger-3">
+          <div className="h-px w-20 bg-[#FFFFFF]/20 mb-4 animate-fade-in-up stagger-2" />
+          <p className="text-[#FFFFFF]/70 text-sm xl:text-base max-w-md leading-relaxed mb-6 animate-fade-in-up stagger-3">
             Build, orchestrate, and deploy AI agents with surgical precision.
             A workspace designed for builders who value clarity.
           </p>
-          <div className="mt-16 flex items-center gap-3 animate-fade-in-up stagger-4">
-            <span className="font-mono text-xs uppercase tracking-widest text-[#FFFFFF]/40">
+          <div className="flex items-center gap-3 animate-fade-in-up stagger-4">
+            <span className="font-mono text-xs uppercase tracking-widest text-[#FFFFFF]/50">
               Agent Builder
             </span>
           </div>
         </div>
-        {/* Quiet grid backdrop */}
-        <div
-          className="absolute inset-0 opacity-[0.05] pointer-events-none"
-          style={{
-            backgroundImage:
-              'linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)',
-            backgroundSize: '72px 72px',
-          }}
-          aria-hidden
-        />
       </div>
 
       {/* Right: Login form */}

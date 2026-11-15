@@ -4,9 +4,11 @@ No provider and no sandbox: the graph is scripted, capability lookup is fixed, a
 the sandbox never starts because no tool is invoked.
 """
 
+import json
+
 import pytest
 from cryptography.fernet import Fernet
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
 from app.config import get_settings
 from app.crypto import encrypt_api_key
@@ -19,6 +21,7 @@ from app.models.tool import Tool
 from app.services.agent_composition import AgentInput, validate_agent
 from app.services.agent_runtime import (
     AgentRuntimeError,
+    _cap,
     _cost,
     build_chat_model,
     build_tools,
@@ -218,6 +221,19 @@ class TestToolBuilding:
         tools = await build_tools(db_session, test_workspace.id, validated, session, depth=0)
 
         assert {"type": "web_search"} in tools
+
+
+class TestCap:
+    def test_live_objects_become_json_safe(self):
+        output = ToolMessage(content="5", tool_call_id="call_1", name="additions")
+        capped = _cap(output)
+        assert isinstance(capped, str)
+        json.dumps(capped)
+
+    def test_plain_values_keep_their_shape(self):
+        assert _cap({"a": 1, "b": [2]}) == {"a": 1, "b": [2]}
+        assert _cap("text") == "text"
+        assert _cap(None) is None
 
 
 class TestCost:

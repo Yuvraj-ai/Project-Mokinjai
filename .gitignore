@@ -88,5 +88,6 @@ mokinjay-progress-assets/
 mokinjay-progress.pdf
 .design-port/
 backboard_frontend/
+api_key_sections/
 # Uploaded files (local storage backend)
 backend/storage/
