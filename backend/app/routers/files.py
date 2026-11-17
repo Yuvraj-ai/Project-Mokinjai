@@ -40,6 +40,7 @@ from app.services.storage import (
     build_storage_key,
     get_storage,
 )
+from app.services.uploads import ALLOWED_UPLOAD_MIME_TYPES, normalise_content_type
 from app.utils.errors import (
     AppException,
     BadRequestException,
@@ -50,32 +51,12 @@ from app.utils.errors import (
 
 router = APIRouter()
 
-# Extraction's input contract, declared here so an unsupported file is refused at upload
-# rather than discovered later. These are the types the sandbox libraries (pypdf,
-# python-docx, openpyxl, pandas) can read. PPTX and HTML are deferred.
-ALLOWED_UPLOAD_MIME_TYPES = frozenset(
-    {
-        "text/plain",
-        "text/markdown",
-        "text/csv",
-        "application/json",
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }
-)
-
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
-
-
-def _normalise_content_type(raw: str | None) -> str:
-    """The declared type without parameters, lower-cased."""
-    return (raw or "").split(";", 1)[0].strip().lower()
 
 
 def _safe_filename(raw: str | None, document_id: str) -> str:
@@ -329,7 +310,7 @@ async def upload_document(
         await _folder_or_404(db, workspace_id, folder_id)
 
     declared = file.content_type or ""
-    normalised = _normalise_content_type(declared)
+    normalised = normalise_content_type(declared)
     if normalised not in ALLOWED_UPLOAD_MIME_TYPES:
         raise BadRequestException(
             f"Unsupported file type {normalised or '(none)'}; accepted types are "

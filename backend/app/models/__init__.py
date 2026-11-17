@@ -3,6 +3,7 @@ from app.models.workspace import Workspace, WorkspaceMember
 from app.models.workflow import Workflow, WorkflowVersion
 from app.models.execution import Execution
 from app.models.knowledge import FileFolder, Document
+from app.models.cloud_connection import CloudConnection
 from app.models.api_key import ApiKey, AuditLog
 from app.models.prompt import PromptTemplate
 from app.models.llm_profile import LlmProfile
@@ -33,6 +34,7 @@ __all__ = [
     "Execution",
     "FileFolder",
     "Document",
+    "CloudConnection",
     "ApiKey",
     "AuditLog",
     "PromptTemplate",

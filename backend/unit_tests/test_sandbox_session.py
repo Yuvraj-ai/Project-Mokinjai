@@ -63,6 +63,11 @@ def fake_backend(monkeypatch):
 
 
 class TestLazyStart:
+    def test_an_instabox_session_offers_the_python_tool(self):
+        session = SandboxSession(config=SandboxConfig(backend="instabox"))
+
+        assert session.uses_docker is True
+
     def test_constructing_a_session_starts_nothing(self, config, fake_backend):
         session = SandboxSession(config=config)
 

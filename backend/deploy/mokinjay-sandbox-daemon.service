@@ -1,0 +1,15 @@
+[Unit]
+Description=Mokinjay sandbox daemon
+After=docker.service network-online.target
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/data/mokinjay/backend
+ExecStart=/data/mokinjay/backend/venv/bin/uvicorn app.services.sandbox.daemon.app:app --host 0.0.0.0 --port 8100
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

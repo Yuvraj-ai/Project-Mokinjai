@@ -6,6 +6,7 @@ from fastapi import FastAPI, WebSocket, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from app.config import get_settings
 from app.logging import logger
 from app.middleware.public_auth import PublicAuthError, public_error_response
@@ -26,6 +27,8 @@ from app.routers import (
     playground,
     api_keys,
     search_credentials,
+    cloud_connections,
+    imports,
 )
 from app.routers.public import router as public_router
 from app.utils.errors import AppException
@@ -145,12 +148,41 @@ app.include_router(
     prefix="/api/workspaces/{workspace_id}/search-credentials",
     tags=["search-credentials"],
 )
+app.include_router(
+    cloud_connections.router,
+    prefix="/api/cloud-connections",
+    tags=["cloud-connections"],
+)
+app.include_router(
+    imports.router,
+    prefix="/api/workspaces/{workspace_id}/imports",
+    tags=["imports"],
+)
 
 
 @app.get("/health")
 async def health_check():
     logger.debug("Health check requested")
     return {"status": "ok"}
+
+
+@app.get("/health/db")
+async def health_db():
+    """The keep-alive probe: Render awake and Supabase not paused.
+
+    Catch broadly on purpose: the probe's job is to answer, not to classify driver
+    errors, and the body must never carry the DSN. The log line is where detail goes.
+    """
+    try:
+        async with async_session() as db:
+            await db.execute(text("SELECT 1"))
+    except Exception:
+        logger.warning("Health DB probe failed", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "database": "unavailable"},
+        )
+    return {"status": "ok", "database": "ok"}
 
 
 # The public /v1 surface: its own sub-application so its OpenAPI document

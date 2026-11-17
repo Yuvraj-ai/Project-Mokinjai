@@ -3,6 +3,8 @@ import {
   Folder as FolderIcon,
   FolderOpen,
   FolderInput,
+  Cloud,
+  FileUp,
   Inbox,
   Loader2,
   Pencil,
@@ -12,6 +14,8 @@ import {
   X,
 } from 'lucide-react'
 import { axiosDetail } from '../api/client'
+import { importGoogleFile } from '../api/cloudImports'
+import { pickGoogleFiles } from '../lib/googlePicker'
 import { listWorkspaces } from '../api/workspaces'
 import {
   createFolder,
@@ -27,6 +31,7 @@ import {
   type Folder,
 } from '../api/files'
 import Button from '../components/ui/Button'
+import OneDriveBrowser from '../components/files/OneDriveBrowser'
 import { Spinner } from '../components/ui/Feedback'
 import { cn } from '../lib/utils'
 
@@ -72,6 +77,8 @@ export default function FilesPage() {
   const [folderGate, setFolderGate] = useState(false)
   const [typedName, setTypedName] = useState('')
   const [dragOver, setDragOver] = useState<View | null>(null)
+  const [onedriveOpen, setOnedriveOpen] = useState(false)
+  const [googleBusy, setGoogleBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const requestId = useRef(0)
 
@@ -114,6 +121,21 @@ export default function FilesPage() {
       })
       .catch((caught) => report(caught, 'Could not load the files'))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('onedrive')) return
+    if (params.get('onedrive') === 'failed') {
+      setError('Could not connect OneDrive. Please try again.')
+    }
+    params.delete('onedrive')
+    const remaining = params.toString()
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}${remaining ? `?${remaining}` : ''}`
+    )
   }, [])
 
   useEffect(() => {
@@ -188,6 +210,29 @@ export default function FilesPage() {
 
   /** The folder page-level uploads land in: the selected folder, otherwise root. */
   const uploadTarget = (): string | null => (view === 'all' || view === 'unfiled' ? null : view)
+
+  const importGoogle = async () => {
+    if (!workspaceId) return
+    setGoogleBusy(true)
+    setError(null)
+    try {
+      const { files, accessToken } = await pickGoogleFiles()
+      const failures: string[] = []
+      for (const file of files) {
+        try {
+          await importGoogleFile(workspaceId, file.id, accessToken)
+        } catch (caught) {
+          failures.push(`${file.name}: ${axiosDetail(caught) ?? 'import failed'}`)
+        }
+      }
+      if (failures.length > 0) setError(failures.join(' · '))
+      else await refresh(workspaceId)
+    } catch (caught) {
+      report(caught, 'Could not import from Google Drive')
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
 
   const dropFiles = (event: React.DragEvent<HTMLDivElement>, folderId: string | null) => {
     event.preventDefault()
@@ -476,8 +521,23 @@ export default function FilesPage() {
               }}
               className="hidden"
             />
-            <Button disabled={busy}>
+            <Button disabled={busy} onClick={() => fileInput.current?.click()}>
               <Upload className="w-4 h-4" aria-hidden /> Upload
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy || !workspaceId}
+              onClick={() => setOnedriveOpen(true)}
+            >
+              <Cloud className="w-4 h-4" aria-hidden /> Import from OneDrive
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy || googleBusy || !workspaceId}
+              loading={googleBusy}
+              onClick={() => void importGoogle()}
+            >
+              <FileUp className="w-4 h-4" aria-hidden /> Import from Google Drive
             </Button>
             <input
               value={query}
@@ -613,6 +673,17 @@ export default function FilesPage() {
           )}
         </div>
       </div>
+
+      {workspaceId && (
+        <OneDriveBrowser
+          open={onedriveOpen}
+          workspaceId={workspaceId}
+          onClose={() => setOnedriveOpen(false)}
+          onImported={() => {
+            void refresh(workspaceId)
+          }}
+        />
+      )}
 
       {folderDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-2 sm:p-4">

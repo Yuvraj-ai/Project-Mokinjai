@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     SANDBOX_BACKEND: str = "auto"
     SANDBOX_IMAGE: str = "mokinjay-sandbox:1"
     SANDBOX_DOCKER_BIN: str = "docker"
+    # The remote daemon. The URL is public but the token is InstaBox's private-port
+    # bearer and `SECRET` is our own HMAC; rotating one is independent of the other.
+    SANDBOX_DAEMON_URL: str = ""
+    SANDBOX_DAEMON_TOKEN: str = ""
+    SANDBOX_DAEMON_SECRET: str = ""
+    SANDBOX_DAEMON_TIMEOUT_GRACE_SECONDS: float = 30.0
     SANDBOX_MEMORY: str = "256m"
     SANDBOX_CPUS: str = "0.5"
     SANDBOX_OUTPUT_TMPFS_MB: int = 64
@@ -57,6 +63,12 @@ class Settings(BaseSettings):
     SANDBOX_TIMEOUT_SECONDS: float = 30.0
     SANDBOX_KERNEL_GRACE_SECONDS: float = 10.0
     SANDBOX_MAX_RUN_SECONDS: int = 1800
+
+    # Cloud file import (OneDrive). The secret never leaves the server; the redirect
+    # URI must match the Entra registration exactly, including the API host.
+    MS_CLIENT_ID: str = ""
+    MS_CLIENT_SECRET: str = ""
+    MS_REDIRECT_URI: str = ""
 
     # App
     BACKEND_HOST: str = "0.0.0.0"

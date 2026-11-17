@@ -2,14 +2,6 @@
 # Runbook and the values you must fill in by hand: docs/guides/deploy-render.md
 # (local-only — docs/ is gitignored). All compute resources share one region.
 
-databases:
-  - name: mokinjay-db
-    databaseName: mokinjay
-    user: mokinjay
-    plan: free # expires 30 days after creation; upgrade to basic-256mb to keep it
-    region: singapore
-    postgresMajorVersion: "16"
-
 services:
   - type: web
     name: mokinjay-api
@@ -18,24 +10,54 @@ services:
     region: singapore
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    # Render injects $PORT; the Dockerfile's hardcoded 8001 is not used here.
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    # Inline opt-in keeps the Alembic safety rail intact for every other process.
-    preDeployCommand: ALLOW_REMOTE_MIGRATIONS=1 python -m alembic upgrade head
+    # No deploy hook before the service starts: that Render feature is paid-only, so
+    # the free plan would skip it. Migrating at boot is idempotent; do not move it back.
+    startCommand: ALLOW_REMOTE_MIGRATIONS=1 python -m alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
+      # Supabase, postgresql+asyncpg:// scheme, session pooler host on port 5432.
       - key: DATABASE_URL
-        sync: false # paste the Internal Database URL with the postgresql+asyncpg:// scheme
+        sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
+      # A real Fernet key, not a generated random string.
       - key: LLM_ENCRYPTION_KEY
-        sync: false # must be a real Fernet key, not a generated random string
+        sync: false
+      # https://app.<domain> — the single CORS origin.
       - key: FRONTEND_URL
-        sync: false # https://mokinjay-web.onrender.com — the CORS origin
+        sync: false
       - key: SANDBOX_BACKEND
-        value: auto # no Docker daemon on Render; falls back to subprocess
+        value: instabox
+      # The published InstaBox daemon URL (no trailing slash).
+      - key: SANDBOX_DAEMON_URL
+        sync: false
+      # The InstaBox private-port ibp_… token.
+      - key: SANDBOX_DAEMON_TOKEN
+        sync: false
+      # Our own HMAC secret; rotates independently of the ibp_ token.
+      - key: SANDBOX_DAEMON_SECRET
+        sync: false
+      # Object storage. Backblaze B2 is the demo choice: 10 GB free, no card, standard
+      # S3 API. Region = the B2 account region (e.g. us-west-004).
+      - key: STORAGE_S3_BUCKET
+        sync: false
+      - key: STORAGE_S3_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: STORAGE_S3_ENDPOINT_URL
+        sync: false
+      - key: STORAGE_S3_REGION
+        sync: false
+      # OneDrive. Unused until the import plan ships, but this file owns the variable.
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false
+      - key: MS_REDIRECT_URI
+        sync: false
 
   - type: web
     name: mokinjay-web
@@ -46,8 +68,17 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # https://api.<domain> — baked in at build time.
       - key: VITE_API_URL
-        sync: false # https://mokinjay-api.onrender.com — baked in at build time
+        sync: false
+      # Public by design. The API key is referrer-restricted, and all three are
+      # baked in at build time like VITE_API_URL.
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_PICKER_API_KEY
+        sync: false
+      - key: VITE_GOOGLE_PROJECT_NUMBER
+        sync: false
     routes:
       - type: rewrite
         source: /*

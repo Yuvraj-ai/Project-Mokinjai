@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, func
+from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -41,6 +41,12 @@ class FileFolder(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "source_provider", "source_id",
+            name="uq_documents_workspace_source",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     # Required even for a folderless file: a root file has no folder to derive the
@@ -64,6 +70,11 @@ class Document(Base):
     # Server-written provenance from the upload path: original_filename, uploaded_by,
     # declared_content_type, storage_backend. Never user input.
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    # Provenance for an imported file: where it came from, not where its bytes live.
+    # The bytes are still at `file_url` under the storage backend. Both stay NULL for an
+    # ordinary upload, and Postgres treats NULLs as distinct, so uploads are unaffected.
+    source_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # PLACEHOLDER: vector store IDs. Type and semantics are undecided; see the
     # "Deferred: the vector database" section of
     # docs/superpowers/specs/2026-10-15-postgresql-only-design.md.

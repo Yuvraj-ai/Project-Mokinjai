@@ -120,7 +120,7 @@ class SandboxSession:
         `auto` may still fall back at start when the socket is unreachable; the tool is
         then offered and its imports fail honestly, rather than the file being invisible.
         """
-        return self._config.backend in ("auto", "docker")
+        return self._config.backend in ("auto", "docker", "instabox")
 
     @property
     def output_dir(self) -> Path | None:

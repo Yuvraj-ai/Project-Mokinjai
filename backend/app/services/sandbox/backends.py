@@ -112,6 +112,10 @@ class SandboxConfig:
     timeout_seconds: float = 30.0
     kernel_grace_seconds: float = 10.0
     max_run_seconds: int = 1800
+    daemon_url: str = ""
+    daemon_token: str = ""
+    daemon_secret: str = ""
+    daemon_timeout_grace: float = 30.0
 
     @classmethod
     def from_settings(cls, settings=None) -> "SandboxConfig":
@@ -127,6 +131,10 @@ class SandboxConfig:
             timeout_seconds=settings.SANDBOX_TIMEOUT_SECONDS,
             kernel_grace_seconds=settings.SANDBOX_KERNEL_GRACE_SECONDS,
             max_run_seconds=settings.SANDBOX_MAX_RUN_SECONDS,
+            daemon_url=settings.SANDBOX_DAEMON_URL,
+            daemon_token=settings.SANDBOX_DAEMON_TOKEN,
+            daemon_secret=settings.SANDBOX_DAEMON_SECRET,
+            daemon_timeout_grace=settings.SANDBOX_DAEMON_TIMEOUT_GRACE_SECONDS,
         )
 
     def container_spec(self, *, run_id: str, host_root: str) -> ContainerSpec:
@@ -430,10 +438,27 @@ def select_backend(config: SandboxConfig) -> BackendFactory:
             )
         return lambda spec: DockerBackend(spec, docker_bin=config.docker_bin)
 
+    if config.backend == "instabox":
+        if not config.daemon_url:
+            raise SandboxError(
+                ErrorKind.BACKEND_UNAVAILABLE,
+                "SANDBOX_DAEMON_URL is not configured.",
+            )
+        from app.services.sandbox.instabox_backend import InstaboxBackend
+
+        return lambda spec: InstaboxBackend(
+            spec,
+            base_url=config.daemon_url,
+            token=config.daemon_token,
+            secret=config.daemon_secret,
+            timeout_grace=config.daemon_timeout_grace,
+        )
+
     if config.backend != "auto":
         raise SandboxError(
             ErrorKind.BACKEND_UNAVAILABLE,
-            f"SANDBOX_BACKEND must be 'auto', 'docker' or 'subprocess'; got {config.backend!r}.",
+            f"SANDBOX_BACKEND must be 'auto', 'docker', 'subprocess' or 'instabox'; "
+            f"got {config.backend!r}.",
         )
 
     if docker_reachable(config.docker_bin):

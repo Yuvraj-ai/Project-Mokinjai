@@ -224,3 +224,26 @@ class TestSelectBackend:
 
         assert caught.value.info.kind == ErrorKind.BACKEND_UNAVAILABLE.value
 
+    def test_instabox_is_selected_when_configured(self):
+        from app.services.sandbox import backends
+
+        factory = backends.select_backend(
+            SandboxConfig(
+                backend="instabox",
+                daemon_url="https://daemon.example",
+                daemon_token="ibp_test",
+                daemon_secret="secret",
+            )
+        )
+
+        assert callable(factory)
+        assert factory(spec(Path("/tmp"))).name == "instabox"
+
+    def test_instabox_without_a_url_raises_backend_unavailable(self):
+        from app.services.sandbox import backends
+
+        with pytest.raises(SandboxError) as caught:
+            backends.select_backend(SandboxConfig(backend="instabox", daemon_url=""))
+
+        assert caught.value.info.kind == ErrorKind.BACKEND_UNAVAILABLE.value
+        assert "SANDBOX_DAEMON_URL" in caught.value.info.message
