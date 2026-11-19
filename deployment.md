@@ -167,14 +167,24 @@ because its free plan caps a file at 50 MB, below the app's 95 MiB ceiling.
 
 | Direction | Result |
 |---|---|
-| `POST /sessions` 10 MiB | OK |
-| `POST /sessions` 30 MiB | OK |
-| `POST /sessions` 50 MiB | proxy `502` at ~60 s; request never reached the daemon |
+| `POST /sessions` 31 MiB | OK |
+| `POST /sessions` 32 MiB | proxy `502` **instantly**; request never reached the daemon |
+| `POST /sessions` 40–95 MiB | same instant `502` |
 | `GET /outputs` 60 MiB | OK in 140 s |
-| 95 MiB upload from Render | **unverified** — home uplink cannot test it |
+| 95 MiB upload from Render | moot for staging — the proxy rejects >32 MiB regardless of sender |
 
-The proxy appears to cap request duration at ~60 s. From Render's datacenter 95 MiB
-may fit; if it does not, chunk the tar by member name (the documented fallback).
+**The InstaBox proxy hard-caps request bodies at 32 MiB.** The 50 MiB failure seen
+earlier from a home uplink was the same cap, not a timeout. Files larger than ~31 MiB
+can still be uploaded to the app and stored in B2, but they **cannot be staged into a
+sandbox run** until the chunked-upload fallback is implemented:
+
+```
+POST /sessions/{id}/files?offset=<n>   raw tar bytes, chunks < 32 MiB
+POST /sessions/{id}/files/finalize     extract the assembled tar into data/
+```
+
+That is the documented fallback in the remote-sandbox spec (open question 1). Until
+it exists, treat the effective attached-file limit as **31 MiB**.
 
 ## 10. Still to do
 
