@@ -17,11 +17,20 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// A 401 from the auth endpoints is an answer (wrong password, dead refresh
-// token), not an expired session — refreshing and retrying there caused the
-// login page to reload itself and churn tokens.
+// Only these endpoints must not trigger a refresh: refreshing from the refresh call
+// itself would loop, and a failed login/OTP must surface as an answer, not a retry.
+// `/api/auth/me` is deliberately NOT in this list: an expired access token there
+// should refresh like any other request.
+const NO_REFRESH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+  '/api/auth/logout-all',
+  '/api/auth/admin/otp/',
+]
+
 function isAuthEndpoint(url: string | undefined): boolean {
-  return !!url && url.includes('/api/auth/')
+  return !!url && NO_REFRESH_PATHS.some((path) => url.includes(path))
 }
 
 apiClient.interceptors.response.use(

@@ -20,6 +20,43 @@ export function useAuth() {
     }
   }, [isAuthenticated, user, setUser, logout, forceSignOut])
 
+  // A dead session cannot announce itself: an idle tab would keep rendering the
+  // signed-in shell forever. Probe on focus and once a minute, and treat a 401
+  // (after the interceptor's one refresh attempt) as the end of the session.
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const probe = () => {
+      getMe()
+        .then(setUser)
+        .catch((caught) => {
+          if ((caught as { response?: { status?: number } })?.response?.status === 401) {
+            forceSignOut()
+          }
+        })
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') probe()
+    }
+
+    const timer = window.setInterval(probe, 60_000)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+
+    // Signing out in another tab clears the tokens; mirror that here.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'access_token' && !event.newValue) forceSignOut()
+    }
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [isAuthenticated, setUser, forceSignOut])
+
   const handleLogin = useCallback(
     async (email: string, password: string) => {
       const tokens = await loginApi(email, password)
