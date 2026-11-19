@@ -143,11 +143,14 @@ separate operations; rotating one does not break the other.
   container has `--network none`, so the blast radius is CPU.
 - Prune unused images after rebuilds; the disk is 20 GiB.
 
-## 8. Two limits still unmeasured
+## 8. Transport limits — measured
 
-- A ~95 MiB tar on `POST /sessions` through the private-port proxy.
-- A large `GET /sessions/{id}/outputs` response (up to 512 MiB on the top tier).
+- **Requests are capped at 32 MiB by the proxy.** 31 MiB arrives; 32 MiB returns an
+  instant `502` before the daemon sees it. The client stages anything larger in 16 MiB
+  parts (`POST /sessions/{id}/files?offset=` + `/finalize`). A 95 MiB file was verified
+  end to end (six parts, finalize 1.0 s, job read `99,614,720` bytes).
+- **Responses:** a 60 MiB output tar came back through the proxy in 140 s. The 512 MiB
+  top-tier case is deferred until a run actually needs it.
 
-The client streams outputs to a temp file, so its memory is bounded either way. If the
-proxy truncates, chunk uploads or outputs by member name; do not redesign until it
-actually fails.
+The client streams outputs to a temp file, so memory is bounded. If a future response
+does truncate, chunk by member name; do not redesign before that happens.

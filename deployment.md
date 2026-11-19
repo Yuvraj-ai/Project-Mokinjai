@@ -250,15 +250,18 @@ multipart create only when the tar is ≤ 31 MiB.
 16 MiB parts, finalized in 1.0 s, and a job read `99,614,720` bytes from
 `/app/data/big.bin`. The effective attached-file limit is back to 95 MiB.
 
-## 12. Still to do
+## 12. Deferred / optional (post-demo)
 
-| Item | Status / needs |
-|---|---|
-| 512 MiB output through the proxy | a run near the top tier |
-| Custom domains (optional) | `app.<domain>` → static, `api.<domain>` → API; update `FRONTEND_URL` / `VITE_API_URL` and rebuild |
-| Keep-warm | one 5-minute monitor on `/health/db` |
-| Seed admin | not needed — 3 users, 1 superuser already exist |
-| Render deploy check | confirm `mokinjay-api` and `mokinjay-web` are on the latest commit (`bd652f2` at the time of writing) |
+The demo is complete. These are deliberately deferred, not pending defects.
+
+| Item | Why deferred | Upgrade trigger |
+|---|---|---|
+| 512 MiB output through the proxy | no run has needed the top tier; a 60 MiB tar already passed in 140 s | a workload that genuinely writes >100 MiB of output |
+| Custom domains (`app.` / `api.`) | the `onrender.com` hosts work and TLS is automatic | a shared/public link that should not say onrender.com |
+| 5-minute `/health/db` keep-warm | the demo is used often enough to stay warm | leaving it unopened for days or weeks, or Supabase pausing |
+| OneDrive folder paging past 200 children | demo folders are small; `$top=200` truncates silently | a real folder with more than 200 entries |
+| Publish the Google consent screen | Testing is enough for the demo (100-user cap, click-through warning) | opening it to users outside the test list |
+| Render deploy check | confirm both services are on the latest commit (`9348fcc` at the time of writing) | routine deploy hygiene |
 
 ## 13. Rotation
 
