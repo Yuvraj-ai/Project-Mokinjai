@@ -33,7 +33,9 @@ python3 -m venv venv
 ```
 
 The daemon needs no database, no LLM key and no JWT secret. `Settings` defaults are
-enough. It does need our HMAC secret, because every session route verifies it:
+enough. It does need our HMAC secret, because every session route verifies it. Copy
+`backend/deploy/daemon.env.example` to `/data/mokinjay/.env`, replace `CHANGE_ME`, and
+lock it down:
 
 ```bash
 cd /data/mokinjay
