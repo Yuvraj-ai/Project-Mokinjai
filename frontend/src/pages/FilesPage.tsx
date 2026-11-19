@@ -228,7 +228,10 @@ export default function FilesPage() {
       if (failures.length > 0) setError(failures.join(' · '))
       else await refresh(workspaceId)
     } catch (caught) {
-      report(caught, 'Could not import from Google Drive')
+      setError(
+        axiosDetail(caught) ??
+          (caught instanceof Error ? caught.message : 'Could not import from Google Drive')
+      )
     } finally {
       setGoogleBusy(false)
     }

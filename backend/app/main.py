@@ -97,11 +97,19 @@ app.add_middleware(
 )
 
 
+# Render probes the health check path every few seconds; logging each one buries the
+# requests that matter. Both health routes are silent unless they fail.
+_QUIET_PATHS = frozenset({"/health", "/health/db"})
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    logger.info(f"{request.method} {request.url.path}")
+    quiet = request.url.path in _QUIET_PATHS
+    if not quiet:
+        logger.info(f"{request.method} {request.url.path}")
     response = await call_next(request)
-    logger.info(f"{request.method} {request.url.path} — status: {response.status_code}")
+    if not quiet or response.status_code >= 400:
+        logger.info(f"{request.method} {request.url.path} — status: {response.status_code}")
     return response
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

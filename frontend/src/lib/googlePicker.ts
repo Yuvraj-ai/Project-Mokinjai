@@ -98,22 +98,24 @@ export async function pickGoogleFiles(): Promise<GooglePickResult> {
       // Required for drive.file: without the Cloud project number the list is empty.
       .setAppId(appId)
       .setCallback((data: google.picker.ResponseObject) => {
-        if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
+        const action = data[google.picker.Response.ACTION]
+        if (action === google.picker.Action.PICKED) {
           const documents = data[google.picker.Response.DOCUMENTS] ?? []
           resolve({
             accessToken,
             files: documents.map((document) => ({
-              id: document[google.picker.Document.ID],
+              id: document[google.picker.Document.ID] ?? '',
               name: document[google.picker.Document.NAME] ?? '',
               mimeType: document[google.picker.Document.MIME_TYPE] ?? '',
               sizeBytes: document.sizeBytes,
             })),
           })
-        } else if (data[google.picker.Response.ACTION] === google.picker.Action.CANCEL) {
+        } else if (action === google.picker.Action.CANCEL) {
           resolve({ files: [], accessToken })
-        } else {
-          reject(new Error('The Google Picker failed'))
+        } else if (action === google.picker.Action.ERROR) {
+          reject(new Error('Google Picker reported an error'))
         }
+        // Other actions (for example LOADED) are not a result: keep waiting.
       })
       .build()
     picker.setVisible(true)
