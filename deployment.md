@@ -1,6 +1,6 @@
 # Deployment record — Mokinjay demo
 
-**Status:** live and verified. Core flow works end to end.
+**Status:** live and verified — core flow, cloud imports and sandbox execution work end to end.
 **Last updated:** 2026-11-20.
 **Decision record:** `docs/guides/deployment-architecture.md` (local-only, authoritative for *why*).
 **Runbooks:** `docs/guides/deploy-render.md`, `backend/deploy/README-sandbox-daemon.md`.
@@ -170,6 +170,9 @@ an encrypted refresh token in `cloud_connections` → `/onedrive/items` browses 
 `POST /api/workspaces/{workspace_id}/imports/onedrive` imports one file. A rotated
 refresh token is written back on every refresh.
 
+**Status (2026-11-20): verified.** Connect, browse, import, duplicate re-import and
+agent access to the imported file all work.
+
 ## 9. Google Picker — Drive import
 
 | Item | Value |
@@ -196,12 +199,10 @@ Import endpoint: `POST /api/workspaces/{workspace_id}/imports/google` with
 `{file_id, access_token}`. Google-native files are exported (Docs → docx, Sheets →
 xlsx, Slides → pdf) and the extension is appended to the filename.
 
-**Status (2026-11-20):** Google login and the Picker open successfully. The first import
-attempt failed before reaching the API because the Picker callback rejected on a
-non-result action; fixed in `810153a` (reject only on `Action.ERROR`, show the real
-error). End-to-end import confirmation pending.
+**Status (2026-11-20): verified.** Google login, Picker, Doc/PDF import, duplicate
+re-import and agent access to the imported file all work.
 
-## 10. Verification performed (2026-11-18/19)
+## 10. Verification performed (2026-11-18/20)
 
 | Check | Result |
 |---|---|
@@ -213,11 +214,14 @@ error). End-to-end import confirmation pending.
 | CORS preflight from static origin | 200, allow-origin correct |
 | Login in the deployed UI | succeeded |
 | Basic agent run | succeeded |
+| OneDrive | connect, browse, import, duplicate re-import, agent access — verified |
+| Google Picker | login, Picker, Doc/PDF import, duplicate re-import, agent access — verified |
 | Daemon `/health` via public URL | `{"status":"ok","docker":true,"sessions":0}` |
 | Unsigned daemon session route | `401` |
 | Signed create → job → outputs → delete | passed; job read mounted data and returned output tar |
+| 95 MiB staged upload | passed in six 16 MiB chunks; job read `99,614,720` bytes |
 | Daemon unit | enabled + active across restart |
-| Backend test suite (local) | **1091 passed, 13 skipped, 3 failed** — the 3 are pre-existing `@tool` decorator tests |
+| Backend test suite (local) | **1098 passed, 13 skipped, 3 failed** — the 3 are pre-existing `@tool` decorator tests |
 | Frontend build | `tsc -b` clean, `vite build` succeeds |
 
 ## 11. Measured transport limits
@@ -250,13 +254,11 @@ multipart create only when the tar is ≤ 31 MiB.
 
 | Item | Status / needs |
 |---|---|
-| OneDrive import | Entra app and `MS_*` are configured; Microsoft login/consent works. Remaining: confirm a file import and a duplicate re-import end to end. |
-| Google Picker import | Project, APIs, consent, client and key are configured; login and Picker open. The pre-request failure is fixed in `810153a`. Remaining: confirm Doc/PDF import and duplicate after the static redeploy. |
 | 512 MiB output through the proxy | a run near the top tier |
 | Custom domains (optional) | `app.<domain>` → static, `api.<domain>` → API; update `FRONTEND_URL` / `VITE_API_URL` and rebuild |
 | Keep-warm | one 5-minute monitor on `/health/db` |
 | Seed admin | not needed — 3 users, 1 superuser already exist |
-| Render deploy check | confirm `mokinjay-api` and `mokinjay-web` are on the latest commit (`8184e83` at the time of writing) |
+| Render deploy check | confirm `mokinjay-api` and `mokinjay-web` are on the latest commit (`bd652f2` at the time of writing) |
 
 ## 13. Rotation
 
