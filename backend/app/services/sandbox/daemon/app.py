@@ -10,7 +10,7 @@ import json
 import tarfile
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -25,6 +25,7 @@ from app.services.sandbox.daemon.store import (
     JobInProgress,
     SessionStore,
     UnknownSession,
+    _extract_tar,
 )
 from app.services.sandbox.errors import SandboxError
 from app.services.sandbox.protocol import JobRequest
@@ -149,6 +150,59 @@ router = APIRouter()
 
 def _bad_request(detail: str) -> HTTPException:
     return HTTPException(status_code=400, detail=detail)
+
+
+def _spool_limit() -> int:
+    """One staged tar, plus multipart headroom over the file ceiling."""
+    return get_settings().STORAGE_MAX_UPLOAD_BYTES + MAX_REQUEST_OVERHEAD_BYTES
+
+
+@router.post("/sessions/{session_id}/files", status_code=204)
+async def upload_part(session_id: str, request: Request, offset: int = 0) -> Response:
+    """Write one chunk of the staged tar. A retried offset overwrites, so it is safe."""
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="unknown session")
+    if offset < 0:
+        raise _bad_request("offset must be non-negative")
+    body = await request.body()
+    if offset + len(body) > _spool_limit():
+        raise HTTPException(status_code=413, detail="staged tar exceeds the upload limit")
+
+    spool = session.root / "upload.tar"
+    with session.lock:
+        current = spool.stat().st_size if spool.exists() else 0
+        if offset > current:
+            raise _bad_request("offset skips bytes that were never uploaded")
+        with open(spool, "r+b" if spool.exists() else "w+b") as handle:
+            handle.seek(offset)
+            handle.write(body)
+    return Response(status_code=204)
+
+
+def _extract_spool(session, limit: int) -> None:
+    spool = session.root / "upload.tar"
+    with tarfile.open(spool, mode="r:*") as archive:
+        _extract_tar(archive, session.root / "data", limit)
+    spool.unlink(missing_ok=True)
+
+
+@router.post("/sessions/{session_id}/files/finalize", status_code=204)
+async def finalize_files(session_id: str) -> Response:
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="unknown session")
+    spool = session.root / "upload.tar"
+    if not spool.is_file():
+        raise _bad_request("no staged upload to finalize")
+    try:
+        with session.lock:
+            await run_in_threadpool(
+                _extract_spool, session, get_settings().STORAGE_MAX_UPLOAD_BYTES
+            )
+    except (tarfile.TarError, InvalidSession) as exc:
+        raise _bad_request(f"invalid staged tar: {exc}")
+    return Response(status_code=204)
 
 
 @router.post("/sessions")

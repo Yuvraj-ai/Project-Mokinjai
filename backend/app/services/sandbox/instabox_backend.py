@@ -26,6 +26,17 @@ from app.services.sandbox.protocol import JobRequest, KernelResponse
 TRANSPORT_FAILURES = (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError)
 RETRY_BACKOFF_SECONDS = 0.5
 UNAVAILABLE_MESSAGE = "The execution engine is restarting."
+# The InstaBox proxy rejects bodies above 32 MiB. Keep the direct multipart create
+# under that, and send anything larger as parts of 16 MiB.
+DIRECT_UPLOAD_LIMIT = 31 * 1024 * 1024
+UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024
+
+
+def _empty_tar() -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w"):
+        pass
+    return buffer.getvalue()
 
 
 def _tar_directory(root: str) -> bytes:
@@ -85,29 +96,64 @@ class InstaboxBackend:
     def start(self) -> None:
         if self._started:
             return
+        payload = _tar_directory(self._spec.host_data_dir)
+        path = f"/sessions/{quote(self._spec.name, safe='')}"
         response = self._send(
             "POST",
             "/sessions",
             data={"session_id": self._spec.name, "spec": json.dumps(_spec_fields(self._spec))},
-            files={"data": ("data.tar", _tar_directory(self._spec.host_data_dir), "application/x-tar")},
+            files={
+                "data": (
+                    "data.tar",
+                    payload if len(payload) <= DIRECT_UPLOAD_LIMIT else _empty_tar(),
+                    "application/x-tar",
+                )
+            },
             timeout=httpx.Timeout(connect=10, write=120, read=120, pool=10),
         )
         self._raise_for_status(response)
+
+        if len(payload) > DIRECT_UPLOAD_LIMIT:
+            try:
+                for offset in range(0, len(payload), UPLOAD_CHUNK_BYTES):
+                    part = payload[offset:offset + UPLOAD_CHUNK_BYTES]
+                    self._raise_for_status(
+                        self._send(
+                            "POST",
+                            f"{path}/files?offset={offset}",
+                            content=part,
+                            timeout=httpx.Timeout(connect=10, write=60, read=60, pool=10),
+                        )
+                    )
+                self._raise_for_status(
+                    self._send(
+                        "POST",
+                        f"{path}/files/finalize",
+                        timeout=httpx.Timeout(connect=10, write=30, read=120, pool=10),
+                    )
+                )
+            except Exception:
+                # The remote session exists even though this client never became usable.
+                self._delete_remote(path)
+                raise
         self._started = True
 
     def stop(self) -> None:
         if not self._started:
             return
         self._started = False
+        self._delete_remote(f"/sessions/{quote(self._spec.name, safe='')}")
+
+    def _delete_remote(self, path: str) -> None:
         try:
             response = self._send(
                 "DELETE",
-                f"/sessions/{quote(self._spec.name, safe='')}",
+                path,
                 timeout=httpx.Timeout(connect=10, write=30, read=30, pool=10),
             )
             if response.status_code != 404:
                 self._raise_for_status(response)
-        except httpx.HTTPError:
+        except (httpx.HTTPError, SandboxError):
             # Close cannot fail the run: the daemon prunes leaked roots itself.
             logger.warning(f"Could not close sandbox session {self._spec.name}")
 

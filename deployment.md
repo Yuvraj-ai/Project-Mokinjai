@@ -169,22 +169,25 @@ because its free plan caps a file at 50 MB, below the app's 95 MiB ceiling.
 |---|---|
 | `POST /sessions` 31 MiB | OK |
 | `POST /sessions` 32 MiB | proxy `502` **instantly**; request never reached the daemon |
-| `POST /sessions` 40–95 MiB | same instant `502` |
+| `POST /sessions` 40–95 MiB | same instant `502` — the client now chunks instead |
 | `GET /outputs` 60 MiB | OK in 140 s |
-| 95 MiB upload from Render | moot for staging — the proxy rejects >32 MiB regardless of sender |
 
-**The InstaBox proxy hard-caps request bodies at 32 MiB.** The 50 MiB failure seen
-earlier from a home uplink was the same cap, not a timeout. Files larger than ~31 MiB
-can still be uploaded to the app and stored in B2, but they **cannot be staged into a
-sandbox run** until the chunked-upload fallback is implemented:
+**The InstaBox proxy hard-caps request bodies at 32 MiB.** Files larger than ~31 MiB
+are staged by the client in 16 MiB parts:
 
 ```
 POST /sessions/{id}/files?offset=<n>   raw tar bytes, chunks < 32 MiB
 POST /sessions/{id}/files/finalize     extract the assembled tar into data/
 ```
 
-That is the documented fallback in the remote-sandbox spec (open question 1). Until
-it exists, treat the effective attached-file limit as **31 MiB**.
+The daemon writes chunks at their offset (a retried offset overwrites), rejects gaps,
+caps the assembled tar at `STORAGE_MAX_UPLOAD_BYTES + 1 MiB`, and extracts on
+finalize. A failed part deletes the remote session. The client chooses the direct
+multipart create only when the tar is ≤ 31 MiB.
+
+**Verified 2026-11-19:** a 95 MiB file was staged through the real proxy in six
+16 MiB parts, finalized in 1.0 s, and a job read `99,614,720` bytes from
+`/app/data/big.bin`. The effective attached-file limit is back to 95 MiB.
 
 ## 10. Still to do
 
@@ -192,7 +195,6 @@ it exists, treat the effective attached-file limit as **31 MiB**.
 |---|---|
 | OneDrive import | Microsoft Entra app (`Files.Read` + `offline_access`, tenant `common`), set `MS_*` on Render, then manual connect → browse → import |
 | Google Picker import | Google Cloud project, Picker + Drive APIs, referrer-restricted API key (including `https://docs.google.com/*`), Web OAuth client, set `VITE_GOOGLE_*` and rebuild the static site |
-| 95 MiB upload from Render | a real upload after the deployed API is warm |
 | 512 MiB output through the proxy | a run near the top tier |
 | Custom domains (optional) | `app.<domain>` → static, `api.<domain>` → API; update `FRONTEND_URL` / `VITE_API_URL` and rebuild |
 | Keep-warm | one 5-minute monitor on `/health/db` |

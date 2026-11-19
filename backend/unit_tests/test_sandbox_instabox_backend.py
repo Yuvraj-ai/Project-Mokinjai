@@ -223,3 +223,52 @@ def test_no_authorization_header_is_sent_without_a_token(tmp_path, request_paylo
     backend(tmp_path, handler, token="").run(request_payload, timeout=5.0)
 
     assert seen == [None]
+
+
+def test_a_tar_above_the_direct_limit_is_uploaded_in_parts(tmp_path, monkeypatch):
+    from app.services.sandbox import instabox_backend as module
+
+    monkeypatch.setattr(module, "DIRECT_UPLOAD_LIMIT", 200)
+    monkeypatch.setattr(module, "UPLOAD_CHUNK_BYTES", 4096)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "big.bin").write_bytes(b"x" * 5000)
+    expected = module._tar_directory(str(tmp_path / "data"))
+    calls = []
+
+    def handler(request):
+        body = request.read()
+        calls.append((request.method, request.url.path, request.url.params.get("offset"), body))
+        if request.url.path.endswith("/sessions"):
+            return reply(201, {"session_id": "mokinjay-sandbox-run1"})
+        return Response(204)
+
+    backend(tmp_path, handler).start()
+
+    assert calls[0][0:3] == ("POST", "/sessions", None)
+    parts = [call for call in calls if call[1].endswith("/files")]
+    assert [int(call[2]) for call in parts] == [0, 4096, 8192]
+    assert b"".join(call[3] for call in parts) == expected
+    assert calls[-1][0:3] == ("POST", "/sessions/mokinjay-sandbox-run1/files/finalize", None)
+
+
+def test_a_failed_part_deletes_the_remote_session(tmp_path, monkeypatch):
+    from app.services.sandbox import instabox_backend as module
+
+    monkeypatch.setattr(module, "DIRECT_UPLOAD_LIMIT", 200)
+    monkeypatch.setattr(module, "UPLOAD_CHUNK_BYTES", 4096)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "big.bin").write_bytes(b"x" * 5000)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        if request.url.path.endswith("/sessions"):
+            return reply(201, {"session_id": "mokinjay-sandbox-run1"})
+        if request.url.path.endswith("/files"):
+            return reply(500, {"detail": "boom"})
+        return Response(204)
+
+    with pytest.raises(SandboxError):
+        backend(tmp_path, handler).start()
+
+    assert ("DELETE", "/sessions/mokinjay-sandbox-run1") in calls
