@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Bot, Send, Square, StopCircle, User, CircleAlert } from 'lucide-react'
 import {
   streamSessionChat,
@@ -52,7 +52,7 @@ function collapseEvents(events: ActivityEvent[]): ActivityEvent[] {
   )
 }
 
-function AssistantTurn({
+const AssistantTurn = memo(function AssistantTurn({
   turn,
   streaming,
 }: {
@@ -89,7 +89,16 @@ function AssistantTurn({
       ) : null}
     </div>
   )
-}
+})
+
+/**
+ * A persisted turn never changes while a new one streams, so it is memoised on
+ * the stable message row. Without this, every token re-rendered the entire
+ * history, including every activity card.
+ */
+const PersistedTurn = memo(function PersistedTurn({ message }: { message: PlaygroundMessage }) {
+  return <AssistantTurn turn={fromPersisted(message)} streaming={false} />
+})
 
 export default function ThreadPane({
   workspaceId,
@@ -106,7 +115,12 @@ export default function ThreadPane({
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // One paint per frame at most: smooth scrolling on every streamed token
+    // queues overlapping animations on a long thread.
+    const frame = requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ block: 'end' })
+    })
+    return () => cancelAnimationFrame(frame)
   }, [messages, inflight])
 
   useEffect(() => () => abortRef.current?.abort(), [])
@@ -132,6 +146,36 @@ export default function ThreadPane({
 
     const controller = new AbortController()
     abortRef.current = controller
+
+    // Coalesce streamed deltas into ~20 renders/second. One setState per token
+    // on a long tool-heavy turn is what turns a fast model into a frozen tab.
+    let pendingContent = ''
+    let pendingReasoning = ''
+    let flushTimer: number | null = null
+    const flush = () => {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      if (!pendingContent && !pendingReasoning) return
+      const content = pendingContent
+      const reasoning = pendingReasoning
+      pendingContent = ''
+      pendingReasoning = ''
+      setInflight((current) =>
+        current
+          ? {
+              ...current,
+              content: current.content + content,
+              reasoning: current.reasoning + reasoning,
+            }
+          : current
+      )
+    }
+    const scheduleFlush = () => {
+      if (flushTimer === null) flushTimer = window.setTimeout(flush, 50)
+    }
+
     try {
       for await (const event of streamSessionChat(
         workspaceId,
@@ -140,30 +184,32 @@ export default function ThreadPane({
         controller.signal
       )) {
         if (event.type === 'token') {
-          setInflight((current) =>
-            current ? { ...current, content: current.content + event.delta } : current
-          )
+          pendingContent += event.delta
+          scheduleFlush()
         } else if (event.type === 'reasoning') {
-          setInflight((current) =>
-            current ? { ...current, reasoning: current.reasoning + event.delta } : current
-          )
+          pendingReasoning += event.delta
+          scheduleFlush()
         } else if (event.type === 'activity') {
+          flush()
           setInflight((current) =>
             current ? { ...current, events: [...current.events, event.payload] } : current
           )
         } else if (event.type === 'done') {
+          flush()
           setInflight((current) =>
             current
               ? { ...current, status: event.status as RenderedAssistant['status'], usage: event.usage, cost_usd: event.cost_usd }
               : current
           )
         } else if (event.type === 'error') {
+          flush()
           setError(event.detail)
         }
       }
     } catch (caught) {
       if ((caught as Error).name !== 'AbortError') setError((caught as Error).message)
     } finally {
+      flush()
       setSending(false)
       abortRef.current = null
       // Wait for the persisted rows to be refetched before dropping the
@@ -210,7 +256,7 @@ export default function ThreadPane({
           ) : (
             <div key={message.id} className="flex justify-start gap-2">
               <Bot className="mt-1 h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />
-              <AssistantTurn turn={fromPersisted(message)} streaming={false} />
+              <PersistedTurn message={message} />
             </div>
           )
         )}

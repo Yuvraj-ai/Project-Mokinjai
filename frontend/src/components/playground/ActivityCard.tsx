@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import {
   Bot,
   BookOpen,
@@ -75,11 +75,14 @@ function bodyOf(event: ActivityEvent): string | null {
  * spinner feel via the "Calling —" label; tool_end swaps in the result and
  * duration. Replays render the persisted events through this same component.
  */
-export default function ActivityCard({ event }: { event: ActivityEvent }) {
+export default memo(function ActivityCard({ event }: { event: ActivityEvent }) {
   const [open, setOpen] = useState(false)
   const isFiles = event.type === 'files_staged'
   const Icon = isFiles ? FolderOpen : (KIND_META[event.kind ?? 'tool'] ?? KIND_META.tool).icon
-  const body = bodyOf(event)
+  // Serialising a result is only needed when the card is actually open. Doing it
+  // for every card on every streamed token was the main-thread cost that froze
+  // long tool-heavy turns.
+  const body = open ? bodyOf(event) : null
 
   return (
     <div className="mb-1.5 rounded-lg border border-line bg-surface-muted">
@@ -105,4 +108,4 @@ export default function ActivityCard({ event }: { event: ActivityEvent }) {
       )}
     </div>
   )
-}
+})
