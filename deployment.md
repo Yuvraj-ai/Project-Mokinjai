@@ -1,7 +1,7 @@
 # Deployment record — Mokinjay demo
 
 **Status:** live and verified. Core flow works end to end.
-**Last updated:** 2026-11-19.
+**Last updated:** 2026-11-20.
 **Decision record:** `docs/guides/deployment-architecture.md` (local-only, authoritative for *why*).
 **Runbooks:** `docs/guides/deploy-render.md`, `backend/deploy/README-sandbox-daemon.md`.
 **Secrets:** none are in this file. Secret values live in Render, the local `.env`, and
@@ -144,7 +144,64 @@ A resume can fall back to a fresh boot; `systemctl enable` restarts the daemon.
 R2 was rejected because it requires a payment method. Supabase Storage was rejected
 because its free plan caps a file at 50 MB, below the app's 95 MiB ceiling.
 
-## 8. Verification performed (2026-11-18/19)
+## 8. Microsoft Entra — OneDrive import
+
+| Item | Value |
+|---|---|
+| App registration | `mokinjay-onedrive` |
+| Authority | `https://login.microsoftonline.com/common` (hardcoded) |
+| Supported account types | **Any Entra ID Tenant + Personal Microsoft accounts** |
+| Manifest audience | `"signInAudience": "AzureADandPersonalMicrosoftAccount"` |
+| Manifest token version | `"api": { "requestedAccessTokenVersion": 2 }` |
+| Platform | **Web** |
+| Redirect URI | `https://mokinjay-api.onrender.com/api/cloud-connections/onedrive/callback` |
+| Delegated permissions | `Files.Read`, `offline_access` (no admin consent) |
+| Client secret | 24-month expiry; value lives in Render as `MS_CLIENT_SECRET` |
+
+Manifest gotchas hit during setup: a top-level `accessTokenAcceptedVersion` is
+**invalid** — the field is `api.requestedAccessTokenVersion`, and it must be `2`
+before the personal-account audience can be saved.
+
+Render variables: `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_REDIRECT_URI`. These are
+runtime values — **Save and deploy**, no rebuild.
+
+Flow: `/api/cloud-connections/onedrive/authorize` → Microsoft consent → callback stores
+an encrypted refresh token in `cloud_connections` → `/onedrive/items` browses →
+`POST /api/workspaces/{workspace_id}/imports/onedrive` imports one file. A rotated
+refresh token is written back on every refresh.
+
+## 9. Google Picker — Drive import
+
+| Item | Value |
+|---|---|
+| Project | `mokinjay-demo` |
+| Project number | `505640929647` |
+| OAuth client | Web application, name `mokinjay-web` |
+| Client ID | `505640929647-18eqp0t6dqedd8gd3tkq12fg1b2eeaeb.apps.googleusercontent.com` |
+| Authorized JavaScript origins | `https://mokinjay-web.onrender.com`, `http://localhost:5173` |
+| Authorized redirect URIs | none (token model) |
+| Enabled APIs | Google Picker API, Google Drive API |
+| Scope | `https://www.googleapis.com/auth/drive.file` |
+| Consent screen | External, **Testing**, test users added |
+| API key restrictions | APIs: Picker + Drive; websites: app origin, `http://localhost:5173/*`, **`https://docs.google.com/*`** |
+
+The token model is used: the browser gets a ~1-hour access token, sends it in the
+import request body, and it is never stored or logged. No Google refresh token and no
+`cloud_connections` row. `setAppId(505640929647)` is required for `drive.file`.
+
+Render static-site variables — all build-time, so **Save, rebuild, and deploy**:
+`VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_PICKER_API_KEY`, `VITE_GOOGLE_PROJECT_NUMBER`.
+
+Import endpoint: `POST /api/workspaces/{workspace_id}/imports/google` with
+`{file_id, access_token}`. Google-native files are exported (Docs → docx, Sheets →
+xlsx, Slides → pdf) and the extension is appended to the filename.
+
+**Status (2026-11-20):** Google login and the Picker open successfully. The first import
+attempt failed before reaching the API because the Picker callback rejected on a
+non-result action; fixed in `810153a` (reject only on `Action.ERROR`, show the real
+error). End-to-end import confirmation pending.
+
+## 10. Verification performed (2026-11-18/19)
 
 | Check | Result |
 |---|---|
@@ -163,7 +220,7 @@ because its free plan caps a file at 50 MB, below the app's 95 MiB ceiling.
 | Backend test suite (local) | **1091 passed, 13 skipped, 3 failed** — the 3 are pre-existing `@tool` decorator tests |
 | Frontend build | `tsc -b` clean, `vite build` succeeds |
 
-## 9. Measured transport limits
+## 11. Measured transport limits
 
 | Direction | Result |
 |---|---|
@@ -189,19 +246,19 @@ multipart create only when the tar is ≤ 31 MiB.
 16 MiB parts, finalized in 1.0 s, and a job read `99,614,720` bytes from
 `/app/data/big.bin`. The effective attached-file limit is back to 95 MiB.
 
-## 10. Still to do
+## 12. Still to do
 
-| Item | Needs |
+| Item | Status / needs |
 |---|---|
-| OneDrive import | Microsoft Entra app (`Files.Read` + `offline_access`, tenant `common`), set `MS_*` on Render, then manual connect → browse → import |
-| Google Picker import | Google Cloud project, Picker + Drive APIs, referrer-restricted API key (including `https://docs.google.com/*`), Web OAuth client, set `VITE_GOOGLE_*` and rebuild the static site |
+| OneDrive import | Entra app and `MS_*` are configured; Microsoft login/consent works. Remaining: confirm a file import and a duplicate re-import end to end. |
+| Google Picker import | Project, APIs, consent, client and key are configured; login and Picker open. The pre-request failure is fixed in `810153a`. Remaining: confirm Doc/PDF import and duplicate after the static redeploy. |
 | 512 MiB output through the proxy | a run near the top tier |
 | Custom domains (optional) | `app.<domain>` → static, `api.<domain>` → API; update `FRONTEND_URL` / `VITE_API_URL` and rebuild |
 | Keep-warm | one 5-minute monitor on `/health/db` |
 | Seed admin | not needed — 3 users, 1 superuser already exist |
-| Commit the pending files | `backend/deploy/*.env.example`, `frontend/.env.render.example`, `deployment.md` are not committed yet |
+| Render deploy check | confirm `mokinjay-api` and `mokinjay-web` are on the latest commit (`8184e83` at the time of writing) |
 
-## 11. Rotation
+## 13. Rotation
 
 - **Daemon secret:** generate `openssl rand -hex 32`, write `/data/mokinjay/.env`,
   restart the unit, set the same value as `SANDBOX_DAEMON_SECRET` on Render. Rotating
@@ -213,7 +270,7 @@ multipart create only when the tar is ≤ 31 MiB.
 - **`JWT_SECRET_KEY`:** rotating it signs every user out.
 - **`DATABASE_URL` password:** rotate in Supabase, update Render, redeploy.
 
-## 12. Troubleshooting
+## 14. Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
